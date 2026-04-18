@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>styles/style.qss</file>
+        <file>templates/simple.html</file>
+        <file>templates/detailed.html</file>
+        <file>data/graduation_reqs.json</file>
+        <file>data/course_category_mapping.json</file>
+    </qresource>
+</RCC>
