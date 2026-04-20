@@ -25,6 +25,8 @@ public:
                                      const QString& semester = "",
                                      const QString& courseType = "",
                                      const QString& tagKeyword = "") const;
+    // ... 其他课程接口可后续扩展
+
 
     // 用户资料操作
     UserProfile getUserProfile() const;
