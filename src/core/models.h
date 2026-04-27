@@ -14,6 +14,7 @@ struct Course {
     double score = 0.0;
     QString courseType;   // 学科基础必修, 学科基础选修, ...
     QString tags;         // 自定义标签，逗号分隔
+    QString status;
 };
 
 struct UserProfile {

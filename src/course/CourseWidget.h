@@ -32,7 +32,7 @@ private:
     QLineEdit *m_nameEdit;
     QDoubleSpinBox *m_creditSpin;
     QDoubleSpinBox *m_scoreSpin;
-    QComboBox *m_categoryCombo;
+    QComboBox *m_courseTypeCombo;
     QLineEdit *m_tagsEdit;
     QComboBox *m_semesterCombo;
     QComboBox *m_statusCombo;

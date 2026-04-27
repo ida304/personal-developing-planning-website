@@ -22,8 +22,8 @@ CourseWidget::CourseWidget(QWidget *parent) : QWidget(parent), m_currentEditId(-
     m_scoreSpin->setSingleStep(1);
     m_scoreSpin->setValue(85.0);
 
-    m_categoryCombo = new QComboBox;
-    m_categoryCombo->addItems({"学科基础必修", "学科基础选修", "专业方向必修",
+    m_courseTypeCombo = new QComboBox;
+    m_courseTypeCombo->addItems({"学科基础必修", "学科基础选修", "专业方向必修",
                                 "核心通识", "选修通识", "通修", "实验课", "暑课"});
 
     m_tagsEdit = new QLineEdit;
@@ -43,7 +43,7 @@ CourseWidget::CourseWidget(QWidget *parent) : QWidget(parent), m_currentEditId(-
     formLayout->addRow("课程名:", m_nameEdit);
     formLayout->addRow("学分:", m_creditSpin);
     formLayout->addRow("成绩:", m_scoreSpin);
-    formLayout->addRow("课程类型:", m_categoryCombo);
+    formLayout->addRow("课程类型:", m_courseTypeCombo);
     formLayout->addRow("标签:", m_tagsEdit);
     formLayout->addRow("学期:", m_semesterCombo);
     formLayout->addRow("状态:", m_statusCombo);
@@ -102,7 +102,7 @@ void CourseWidget::onAddClicked()
     QString name = m_nameEdit->text().trimmed();
     double credit = m_creditSpin->value();
     double score = m_scoreSpin->value();
-    QString category = m_categoryCombo->currentText();
+    QString courseType = m_courseTypeCombo->currentText();
     QString tags = m_tagsEdit->text().trimmed();
     QString semester = m_semesterCombo->currentText();
     QString status = m_statusCombo->currentText();
@@ -124,7 +124,7 @@ void CourseWidget::onAddClicked()
     course.name = name;
     course.credit = credit;
     course.score = score;
-    course.category = category;
+    course.courseType = courseType;
     course.tags = tags;
     course.semester = semester;
     course.status = status;
@@ -146,7 +146,7 @@ void CourseWidget::onUpdateClicked()
     QString name = m_nameEdit->text().trimmed();
     double credit = m_creditSpin->value();
     double score = m_scoreSpin->value();
-    QString category = m_categoryCombo->currentText();
+    QString courseType = m_courseTypeCombo->currentText();
     QString tags = m_tagsEdit->text().trimmed();
     QString semester = m_semesterCombo->currentText();
     QString status = m_statusCombo->currentText();
@@ -169,7 +169,7 @@ void CourseWidget::onUpdateClicked()
     course.name = name;
     course.credit = credit;
     course.score = score;
-    course.category = category;
+    course.courseType = courseType;
     course.tags = tags;
     course.semester = semester;
     course.status = status;
@@ -193,7 +193,7 @@ void CourseWidget::onSearchClicked()
     QString searchField;
     if (field == "按课程名") searchField = "name";
     else if (field == "按标签") searchField = "tags";
-    else searchField = "category";
+    else searchField = "courseType";
 
     refreshTable(keyword, searchField);
 }
@@ -211,8 +211,8 @@ void CourseWidget::refreshTable(const QString& keyword, const QString& field)
                 match = c.name.contains(keyword, Qt::CaseInsensitive);
             } else if (field == "tags") {
                 match = c.tags.contains(keyword, Qt::CaseInsensitive);
-            } else if (field == "category") {
-                match = c.category.contains(keyword, Qt::CaseInsensitive);
+            } else if (field == "courseType") {
+                match = c.courseType.contains(keyword, Qt::CaseInsensitive);
             }
             if (match) {
                 courses.append(c);
@@ -228,7 +228,7 @@ void CourseWidget::refreshTable(const QString& keyword, const QString& field)
         m_tableWidget->setItem(i, 0, new QTableWidgetItem(c.name));
         m_tableWidget->setItem(i, 1, new QTableWidgetItem(QString::number(c.credit)));
         m_tableWidget->setItem(i, 2, new QTableWidgetItem(QString::number(c.score)));
-        m_tableWidget->setItem(i, 3, new QTableWidgetItem(c.category));
+        m_tableWidget->setItem(i, 3, new QTableWidgetItem(c.courseType));
         m_tableWidget->setItem(i, 4, new QTableWidgetItem(c.tags));
         m_tableWidget->setItem(i, 5, new QTableWidgetItem(c.semester));
         m_tableWidget->setItem(i, 6, new QTableWidgetItem(c.status));
@@ -266,7 +266,7 @@ void CourseWidget::onEditClicked(int row)
     m_nameEdit->setText(c.name);
     m_creditSpin->setValue(c.credit);
     m_scoreSpin->setValue(c.score);
-    m_categoryCombo->setCurrentText(c.category);
+    m_courseTypeCombo->setCurrentText(c.courseType);
     m_tagsEdit->setText(c.tags);
     m_semesterCombo->setCurrentText(c.semester);
     m_statusCombo->setCurrentText(c.status);

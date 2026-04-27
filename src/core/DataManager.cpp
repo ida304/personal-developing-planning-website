@@ -50,7 +50,8 @@ bool DataManager::initDatabase()
             credit REAL NOT NULL,
             score REAL NOT NULL,
             course_type TEXT NOT NULL,
-            tags TEXT
+            tags TEXT,
+            status TEXT DEFAULT '已修'
         )
     )";
     if (!query.exec(createCourses)) {
@@ -99,6 +100,7 @@ bool DataManager::addCourse(const Course& course)
     query.addBindValue(course.score);
     query.addBindValue(course.courseType);
     query.addBindValue(course.tags);
+    query.addBindValue(course.status);
     if (!query.exec()) {
         qWarning() << "addCourse failed:" << query.lastError().text();
         return false;
@@ -112,7 +114,7 @@ bool DataManager::updateCourse(int id, const Course& course)
     QSqlQuery query;
     query.prepare(R"(
         UPDATE courses SET course_code=?, name=?, semester=?, credit=?, score=?, course_type=?, tags=?
-        WHERE id=?
+        WHERE id=?,status=?
     )");
     query.addBindValue(course.courseCode);
     query.addBindValue(course.name);
