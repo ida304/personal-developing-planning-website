@@ -2,13 +2,12 @@
 #define COURSEWIDGET_H
 
 #include <QWidget>
-#include "../core/models.h"
-
-class QTableWidget;
-class QLineEdit;
-class QComboBox;
-class QPushButton;
-class QLabel;
+#include <QLineEdit>
+#include <QDoubleSpinBox>
+#include <QComboBox>
+#include <QPushButton>
+#include <QTableWidget>
+#include <QLabel>
 
 class CourseWidget : public QWidget
 {
@@ -18,28 +17,38 @@ public:
 
 private slots:
     void onAddClicked();
-    void onEditClicked();
-    void onDeleteClicked();
+    void onUpdateClicked();
+    void onDeleteClicked(int courseId);
+    void onEditClicked(int row);
     void onSearchClicked();
-    void refreshTable();
 
 private:
-    void setupUI();
-    void loadCoursesToTable(const QList<Course>& courses);
-    void showCourseDialog(Course* course = nullptr);
-    void updateStatistics(const QList<Course>& courses);
+    void refreshTable(const QString& keyword = "", const QString& field = "");
+    void updateGPA();
+    void clearForm();
+    void setEditingMode(bool editing, int id = -1);
 
-    QLineEdit* _searchEdit;
-    QComboBox* _semesterCombo;
-    QComboBox* _typeCombo;
-    QComboBox* _tagCombo;
-    QPushButton* _searchBtn;
-    QPushButton* _resetBtn;
-    QTableWidget* _table;
-    QLabel* _statLabel;
-    QPushButton* _addBtn;
-    QPushButton* _editBtn;
-    QPushButton* _delBtn;
+    // 表单控件
+    QLineEdit *m_nameEdit;
+    QDoubleSpinBox *m_creditSpin;
+    QDoubleSpinBox *m_scoreSpin;
+    QComboBox *m_categoryCombo;
+    QLineEdit *m_tagsEdit;
+    QComboBox *m_semesterCombo;
+    QComboBox *m_statusCombo;
+    QPushButton *m_addBtn;
+    QPushButton *m_updateBtn;
+
+    // 搜索控件
+    QLineEdit *m_searchEdit;
+    QComboBox *m_searchFieldCombo;
+    QPushButton *m_searchBtn;
+
+    // 表格和显示
+    QTableWidget *m_tableWidget;
+    QLabel *m_gpaLabel;
+
+    int m_currentEditId;
 };
 
 #endif // COURSEWIDGET_H

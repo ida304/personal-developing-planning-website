@@ -1,269 +1,350 @@
 #include "CourseWidget.h"
-#include "../core/DataManager.h"
-#include "GpaCalculator.h"
+#include "src/core/DataManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
-#include <QLabel>
-#include <QLineEdit>
-#include <QComboBox>
-#include <QTableWidget>
-#include <QHeaderView>
-#include <QPushButton>
 #include <QMessageBox>
-#include <QDialog>
-#include <QDialogButtonBox>
-#include <QDoubleSpinBox>
+#include <QDebug>
 
-CourseWidget::CourseWidget(QWidget *parent) : QWidget(parent)
+CourseWidget::CourseWidget(QWidget *parent) : QWidget(parent), m_currentEditId(-1)
 {
-    setupUI();
-    refreshTable();
-    connect(&DataManager::instance(), &DataManager::dataChanged, this, &CourseWidget::refreshTable);
-}
+    // ========== 1. 创建表单区域 ==========
+    QFormLayout *formLayout = new QFormLayout();
 
-void CourseWidget::setupUI()
-{
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(10, 10, 10, 10);
-    mainLayout->setSpacing(6);
+    m_nameEdit = new QLineEdit;
+    m_creditSpin = new QDoubleSpinBox;
+    m_creditSpin->setRange(0.5, 10.0);
+    m_creditSpin->setSingleStep(0.5);
+    m_creditSpin->setValue(3.0);
 
-    // 筛选栏
-    QHBoxLayout *filterLayout = new QHBoxLayout;
-    filterLayout->addWidget(new QLabel("搜索:"));
-    _searchEdit = new QLineEdit;
-    _searchEdit->setPlaceholderText("课程名/课序号");
-    filterLayout->addWidget(_searchEdit);
+    m_scoreSpin = new QDoubleSpinBox;
+    m_scoreSpin->setRange(0, 100);
+    m_scoreSpin->setSingleStep(1);
+    m_scoreSpin->setValue(85.0);
 
-    filterLayout->addWidget(new QLabel("学期:"));
-    _semesterCombo = new QComboBox;
-    _semesterCombo->addItem("全部");
-    _semesterCombo->addItems({"2024-2025-1", "2024-2025-2", "2025-2026-1", "2025-2026-2"});
-    filterLayout->addWidget(_semesterCombo);
+    m_categoryCombo = new QComboBox;
+    m_categoryCombo->addItems({"学科基础必修", "学科基础选修", "专业方向必修",
+                                "核心通识", "选修通识", "通修", "实验课", "暑课"});
 
-    filterLayout->addWidget(new QLabel("课程类型:"));
-    _typeCombo = new QComboBox;
-    _typeCombo->addItem("全部");
-    _typeCombo->addItems({"学科基础必修", "学科基础选修", "专业方向必修", "核心通识", "选修通识", "通修", "实验课", "暑课"});
-    filterLayout->addWidget(_typeCombo);
+    m_tagsEdit = new QLineEdit;
 
-    filterLayout->addWidget(new QLabel("标签:"));
-    _tagCombo = new QComboBox;
-    _tagCombo->setEditable(true);
-    _tagCombo->addItem("全部");
-    filterLayout->addWidget(_tagCombo);
+    // 学期下拉框：可手动输入，预设多个常用学期
+    m_semesterCombo = new QComboBox;
+    m_semesterCombo->setEditable(true);
+    m_semesterCombo->addItems({
+        "2024-2025-1", "2024-2025-2",
+        "2025-2026-1", "2025-2026-2",
+        "2026-2027-1", "2026-2027-2"
+    });
 
-    _searchBtn = new QPushButton("查询");
-    _resetBtn = new QPushButton("重置");
-    filterLayout->addWidget(_searchBtn);
-    filterLayout->addWidget(_resetBtn);
-    filterLayout->addStretch();
+    m_statusCombo = new QComboBox;
+    m_statusCombo->addItems({"已修", "在修", "计划修"});
 
-    // 表格
-    _table = new QTableWidget;
-    _table->setColumnCount(8);
-    _table->setHorizontalHeaderLabels({"ID", "课序号", "课程名", "学期", "学分", "成绩", "课程类型", "标签"});
-    _table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    _table->setSelectionBehavior(QAbstractItemView::SelectRows);
-    _table->horizontalHeader()->setStretchLastSection(true);
-    _table->hideColumn(0);
+    formLayout->addRow("课程名:", m_nameEdit);
+    formLayout->addRow("学分:", m_creditSpin);
+    formLayout->addRow("成绩:", m_scoreSpin);
+    formLayout->addRow("课程类型:", m_categoryCombo);
+    formLayout->addRow("标签:", m_tagsEdit);
+    formLayout->addRow("学期:", m_semesterCombo);
+    formLayout->addRow("状态:", m_statusCombo);
 
-    // 统计信息
-    _statLabel = new QLabel;
-    _statLabel->setStyleSheet("background-color: #e8f0fe; padding: 5px; border-radius: 3px;");
+    m_addBtn = new QPushButton("添加课程");
+    m_updateBtn = new QPushButton("更新课程");
+    m_updateBtn->setEnabled(false);
 
-    // 按钮栏
     QHBoxLayout *btnLayout = new QHBoxLayout;
-    _addBtn = new QPushButton("添加课程");
-    _editBtn = new QPushButton("修改");
-    _delBtn = new QPushButton("删除");
-    btnLayout->addWidget(_addBtn);
-    btnLayout->addWidget(_editBtn);
-    btnLayout->addWidget(_delBtn);
-    btnLayout->addStretch();
+    btnLayout->addWidget(m_addBtn);
+    btnLayout->addWidget(m_updateBtn);
 
-    mainLayout->addLayout(filterLayout);
-    mainLayout->addWidget(_table, 1);
-    mainLayout->addWidget(_statLabel);
+    // ========== 2. 搜索区域 ==========
+    m_searchEdit = new QLineEdit;
+    m_searchEdit->setPlaceholderText("输入关键词...");
+    m_searchFieldCombo = new QComboBox;
+    m_searchFieldCombo->addItems({"按课程名", "按标签", "按类型"});
+    m_searchBtn = new QPushButton("搜索");
+
+    QHBoxLayout *searchLayout = new QHBoxLayout;
+    searchLayout->addWidget(new QLabel("搜索:"));
+    searchLayout->addWidget(m_searchEdit);
+    searchLayout->addWidget(m_searchFieldCombo);
+    searchLayout->addWidget(m_searchBtn);
+    searchLayout->addStretch();
+
+    // ========== 3. 创建表格区域 ==========
+    m_tableWidget = new QTableWidget;
+    m_tableWidget->setColumnCount(8);
+    m_tableWidget->setHorizontalHeaderLabels({"课程名", "学分", "成绩", "类型", "标签", "学期", "状态", "操作"});
+
+    // ========== 4. GPA显示区域 ==========
+    m_gpaLabel = new QLabel("当前加权GPA: 0.00");
+    m_gpaLabel->setStyleSheet("font-size: 14px; font-weight: bold; color: #4caf50;");
+
+    // ========== 5. 布局 ==========
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->addLayout(formLayout);
     mainLayout->addLayout(btnLayout);
+    mainLayout->addLayout(searchLayout);
+    mainLayout->addWidget(m_tableWidget);
+    mainLayout->addWidget(m_gpaLabel);
 
-    connect(_searchBtn, &QPushButton::clicked, this, &CourseWidget::onSearchClicked);
-    connect(_resetBtn, &QPushButton::clicked, this, &CourseWidget::onSearchClicked);
-    connect(_addBtn, &QPushButton::clicked, this, &CourseWidget::onAddClicked);
-    connect(_editBtn, &QPushButton::clicked, this, &CourseWidget::onEditClicked);
-    connect(_delBtn, &QPushButton::clicked, this, &CourseWidget::onDeleteClicked);
-    connect(_semesterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CourseWidget::onSearchClicked);
-    connect(_typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CourseWidget::onSearchClicked);
-    connect(_tagCombo, &QComboBox::currentTextChanged, this, &CourseWidget::onSearchClicked);
-}
+    // ========== 6. 连接信号 ==========
+    connect(m_addBtn, &QPushButton::clicked, this, &CourseWidget::onAddClicked);
+    connect(m_updateBtn, &QPushButton::clicked, this, &CourseWidget::onUpdateClicked);
+    connect(m_searchBtn, &QPushButton::clicked, this, &CourseWidget::onSearchClicked);
 
-void CourseWidget::refreshTable()
-{
-    QList<Course> allCourses = DataManager::instance().getAllCourses();
-    QStringList allTags;
-    for (const Course& c : allCourses) {
-        if (!c.tags.isEmpty()) {
-            QStringList tags = c.tags.split(',', Qt::SkipEmptyParts);
-            for (const QString& t : tags) allTags << t.trimmed();
-        }
-    }
-    allTags.removeDuplicates();
-    _tagCombo->clear();
-    _tagCombo->addItem("全部");
-    _tagCombo->addItems(allTags);
-    onSearchClicked();
-}
-
-void CourseWidget::onSearchClicked()
-{
-    QString keyword = _searchEdit->text().trimmed();
-    QString semester = _semesterCombo->currentText();
-    if (semester == "全部") semester = "";
-    QString courseType = _typeCombo->currentText();
-    if (courseType == "全部") courseType = "";
-    QString tagKeyword = _tagCombo->currentText();
-    if (tagKeyword == "全部") tagKeyword = "";
-
-    QList<Course> filtered = DataManager::instance().getCoursesByFilter(keyword, semester, courseType, tagKeyword);
-    loadCoursesToTable(filtered);
-    updateStatistics(filtered);
-}
-
-void CourseWidget::loadCoursesToTable(const QList<Course>& courses)
-{
-    _table->setRowCount(courses.size());
-    for (int i = 0; i < courses.size(); ++i) {
-        const Course& c = courses[i];
-        _table->setItem(i, 0, new QTableWidgetItem(QString::number(c.id)));
-        _table->setItem(i, 1, new QTableWidgetItem(c.courseCode));
-        _table->setItem(i, 2, new QTableWidgetItem(c.name));
-        _table->setItem(i, 3, new QTableWidgetItem(c.semester));
-        _table->setItem(i, 4, new QTableWidgetItem(QString::number(c.credit)));
-        _table->setItem(i, 5, new QTableWidgetItem(QString::number(c.score)));
-        _table->setItem(i, 6, new QTableWidgetItem(c.courseType));
-        _table->setItem(i, 7, new QTableWidgetItem(c.tags));
-    }
-    _table->resizeColumnsToContents();
-}
-
-void CourseWidget::updateStatistics(const QList<Course>& courses)
-{
-    double avgScore = GPACalculator::calculateAverageScore(courses);
-    double gpa = GPACalculator::calculateGpa(courses);
-    _statLabel->setText(QString("当前显示 %1 门课程 | 平均成绩: %2  |  GPA: %3")
-                        .arg(courses.size())
-                        .arg(avgScore, 0, 'f', 2)
-                        .arg(gpa, 0, 'f', 2));
-}
-
-void CourseWidget::showCourseDialog(Course* course)
-{
-    QDialog dialog(this);
-    dialog.setWindowTitle(course ? "修改课程" : "添加课程");
-    QFormLayout *form = new QFormLayout(&dialog);
-
-    QLineEdit *codeEdit = new QLineEdit;
-    QLineEdit *nameEdit = new QLineEdit;
-    QComboBox *semesterCombo = new QComboBox;
-    semesterCombo->addItems({"2024-2025-1", "2024-2025-2", "2025-2026-1", "2025-2026-2"});
-    QDoubleSpinBox *creditSpin = new QDoubleSpinBox;
-    creditSpin->setRange(0, 10);
-    creditSpin->setSingleStep(0.5);
-    QDoubleSpinBox *scoreSpin = new QDoubleSpinBox;
-    scoreSpin->setRange(0, 100);
-    scoreSpin->setSuffix(" 分");
-    QComboBox *typeCombo = new QComboBox;
-    typeCombo->addItems({"学科基础必修", "学科基础选修", "专业方向必修", "核心通识", "选修通识", "通修", "实验课", "暑课"});
-    QLineEdit *tagsEdit = new QLineEdit;
-    tagsEdit->setPlaceholderText("多个标签用逗号分隔");
-
-    if (course) {
-        codeEdit->setText(course->courseCode);
-        nameEdit->setText(course->name);
-        semesterCombo->setCurrentText(course->semester);
-        creditSpin->setValue(course->credit);
-        scoreSpin->setValue(course->score);
-        typeCombo->setCurrentText(course->courseType);
-        tagsEdit->setText(course->tags);
-    }
-
-    form->addRow("课序号(可选):", codeEdit);
-    form->addRow("课程名 *:", nameEdit);
-    form->addRow("学期 *:", semesterCombo);
-    form->addRow("学分 *:", creditSpin);
-    form->addRow("成绩 *:", scoreSpin);
-    form->addRow("课程类型 *:", typeCombo);
-    form->addRow("自定义标签:", tagsEdit);
-
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    form->addRow(buttons);
-
-    if (dialog.exec() == QDialog::Accepted) {
-        if (nameEdit->text().trimmed().isEmpty()) {
-            QMessageBox::warning(this, "提示", "课程名不能为空");
-            return;
-        }
-        Course newCourse;
-        newCourse.courseCode = codeEdit->text().trimmed();
-        newCourse.name = nameEdit->text().trimmed();
-        newCourse.semester = semesterCombo->currentText();
-        newCourse.credit = creditSpin->value();
-        newCourse.score = scoreSpin->value();
-        newCourse.courseType = typeCombo->currentText();
-        newCourse.tags = tagsEdit->text().trimmed();
-
-        if (course) {
-            newCourse.id = course->id;
-            if (DataManager::instance().updateCourse(course->id, newCourse))
-                QMessageBox::information(&dialog, "成功", "修改成功");
-            else
-                QMessageBox::warning(&dialog, "错误", "修改失败");
-        } else {
-            if (DataManager::instance().addCourse(newCourse))
-                QMessageBox::information(&dialog, "成功", "添加成功");
-            else
-                QMessageBox::warning(&dialog, "错误", "添加失败");
-        }
-        refreshTable();
-    }
+    // ========== 7. 初始化 ==========
+    refreshTable();
+    updateGPA();
 }
 
 void CourseWidget::onAddClicked()
 {
-    showCourseDialog(nullptr);
-}
+    QString name = m_nameEdit->text().trimmed();
+    double credit = m_creditSpin->value();
+    double score = m_scoreSpin->value();
+    QString category = m_categoryCombo->currentText();
+    QString tags = m_tagsEdit->text().trimmed();
+    QString semester = m_semesterCombo->currentText();
+    QString status = m_statusCombo->currentText();
 
-void CourseWidget::onEditClicked()
-{
-    int row = _table->currentRow();
-    if (row < 0) {
-        QMessageBox::information(this, "提示", "请先选择要修改的课程");
+    if (name.isEmpty()) {
+        QMessageBox::warning(this, "错误", "课程名不能为空");
         return;
     }
-    int id = _table->item(row, 0)->text().toInt();
-    QList<Course> all = DataManager::instance().getAllCourses();
-    for (Course& c : all) {
-        if (c.id == id) {
-            showCourseDialog(&c);
+    if (credit <= 0 || credit > 10) {
+        QMessageBox::warning(this, "错误", "学分必须在0.5-10之间");
+        return;
+    }
+    if (score < 0 || score > 100) {
+        QMessageBox::warning(this, "错误", "成绩必须在0-100之间");
+        return;
+    }
+
+    Course course;
+    course.name = name;
+    course.credit = credit;
+    course.score = score;
+    course.category = category;
+    course.tags = tags;
+    course.semester = semester;
+    course.status = status;
+
+    if (DataManager::instance().addCourse(course)) {
+        QMessageBox::information(this, "成功", "课程添加成功");
+        clearForm();
+        refreshTable();
+        updateGPA();
+    } else {
+        QMessageBox::critical(this, "错误", "保存失败，请重试");
+    }
+}
+
+void CourseWidget::onUpdateClicked()
+{
+    if (m_currentEditId < 0) return;
+
+    QString name = m_nameEdit->text().trimmed();
+    double credit = m_creditSpin->value();
+    double score = m_scoreSpin->value();
+    QString category = m_categoryCombo->currentText();
+    QString tags = m_tagsEdit->text().trimmed();
+    QString semester = m_semesterCombo->currentText();
+    QString status = m_statusCombo->currentText();
+
+    if (name.isEmpty()) {
+        QMessageBox::warning(this, "错误", "课程名不能为空");
+        return;
+    }
+    if (credit <= 0 || credit > 10) {
+        QMessageBox::warning(this, "错误", "学分必须在0.5-10之间");
+        return;
+    }
+    if (score < 0 || score > 100) {
+        QMessageBox::warning(this, "错误", "成绩必须在0-100之间");
+        return;
+    }
+
+    Course course;
+    course.id = m_currentEditId;
+    course.name = name;
+    course.credit = credit;
+    course.score = score;
+    course.category = category;
+    course.tags = tags;
+    course.semester = semester;
+    course.status = status;
+
+    if (DataManager::instance().updateCourse(course)) {
+        QMessageBox::information(this, "成功", "课程更新成功");
+        clearForm();
+        setEditingMode(false);
+        refreshTable();
+        updateGPA();
+    } else {
+        QMessageBox::critical(this, "错误", "更新失败，请重试");
+    }
+}
+
+void CourseWidget::onSearchClicked()
+{
+    QString keyword = m_searchEdit->text().trimmed();
+    QString field = m_searchFieldCombo->currentText();
+
+    QString searchField;
+    if (field == "按课程名") searchField = "name";
+    else if (field == "按标签") searchField = "tags";
+    else searchField = "category";
+
+    refreshTable(keyword, searchField);
+}
+
+void CourseWidget::refreshTable(const QString& keyword, const QString& field)
+{
+    QList<Course> allCourses = DataManager::instance().getAllCourses();
+    QList<Course> courses;
+
+    // 如果有搜索条件，进行过滤
+    if (!keyword.isEmpty() && !field.isEmpty()) {
+        for (const Course& c : allCourses) {
+            bool match = false;
+            if (field == "name") {
+                match = c.name.contains(keyword, Qt::CaseInsensitive);
+            } else if (field == "tags") {
+                match = c.tags.contains(keyword, Qt::CaseInsensitive);
+            } else if (field == "category") {
+                match = c.category.contains(keyword, Qt::CaseInsensitive);
+            }
+            if (match) {
+                courses.append(c);
+            }
+        }
+    } else {
+        courses = allCourses;
+    }
+
+    m_tableWidget->setRowCount(courses.size());
+    for (int i = 0; i < courses.size(); ++i) {
+        const Course& c = courses[i];
+        m_tableWidget->setItem(i, 0, new QTableWidgetItem(c.name));
+        m_tableWidget->setItem(i, 1, new QTableWidgetItem(QString::number(c.credit)));
+        m_tableWidget->setItem(i, 2, new QTableWidgetItem(QString::number(c.score)));
+        m_tableWidget->setItem(i, 3, new QTableWidgetItem(c.category));
+        m_tableWidget->setItem(i, 4, new QTableWidgetItem(c.tags));
+        m_tableWidget->setItem(i, 5, new QTableWidgetItem(c.semester));
+        m_tableWidget->setItem(i, 6, new QTableWidgetItem(c.status));
+
+        QWidget *btnWidget = new QWidget;
+        QHBoxLayout *btnLayout = new QHBoxLayout(btnWidget);
+        btnLayout->setContentsMargins(5, 0, 5, 0);
+
+        QPushButton *editBtn = new QPushButton("编辑");
+        QPushButton *delBtn = new QPushButton("删除");
+
+        btnLayout->addWidget(editBtn);
+        btnLayout->addWidget(delBtn);
+
+        m_tableWidget->setCellWidget(i, 7, btnWidget);
+
+        connect(editBtn, &QPushButton::clicked, this, [this, i]() {
+            onEditClicked(i);
+        });
+
+        int courseId = c.id;
+        connect(delBtn, &QPushButton::clicked, this, [this, courseId]() {
+            onDeleteClicked(courseId);
+        });
+    }
+}
+
+void CourseWidget::onEditClicked(int row)
+{
+    QList<Course> courses = DataManager::instance().getAllCourses();
+    if (row < 0 || row >= courses.size()) return;
+
+    const Course& c = courses[row];
+
+    m_nameEdit->setText(c.name);
+    m_creditSpin->setValue(c.credit);
+    m_scoreSpin->setValue(c.score);
+    m_categoryCombo->setCurrentText(c.category);
+    m_tagsEdit->setText(c.tags);
+    m_semesterCombo->setCurrentText(c.semester);
+    m_statusCombo->setCurrentText(c.status);
+
+    setEditingMode(true, c.id);
+}
+
+void CourseWidget::updateGPA()
+{
+    QList<Course> courses = DataManager::instance().getAllCourses();
+    double totalPoints = 0.0;
+    double totalCredits = 0.0;
+
+    for (const Course& c : courses) {
+        if (c.status != "已修") continue;
+
+        double gp = 0.0;
+        if (c.score >= 90) gp = 4.0;
+        else if (c.score >= 85) gp = 3.7;
+        else if (c.score >= 82) gp = 3.3;
+        else if (c.score >= 78) gp = 3.0;
+        else if (c.score >= 75) gp = 2.7;
+        else if (c.score >= 72) gp = 2.3;
+        else if (c.score >= 68) gp = 2.0;
+        else if (c.score >= 64) gp = 1.5;
+        else if (c.score >= 60) gp = 1.0;
+        else gp = 0.0;
+
+        totalPoints += gp * c.credit;
+        totalCredits += c.credit;
+    }
+
+    double gpa = (totalCredits > 0) ? totalPoints / totalCredits : 0.0;
+    m_gpaLabel->setText(QString("当前加权GPA: %1").arg(gpa, 0, 'f', 2));
+}
+
+void CourseWidget::clearForm()
+{
+    m_nameEdit->clear();
+    m_creditSpin->setValue(3.0);
+    m_scoreSpin->setValue(85.0);
+    m_tagsEdit->clear();
+    m_semesterCombo->setCurrentIndex(0);
+    m_statusCombo->setCurrentIndex(0);
+}
+
+void CourseWidget::setEditingMode(bool editing, int id)
+{
+    m_currentEditId = editing ? id : -1;
+    m_addBtn->setEnabled(!editing);
+    m_updateBtn->setEnabled(editing);
+}
+
+void CourseWidget::onDeleteClicked(int courseId)
+{
+    QString courseName;
+    QList<Course> courses = DataManager::instance().getAllCourses();
+    for (const Course& c : courses) {
+        if (c.id == courseId) {
+            courseName = c.name;
             break;
         }
     }
-}
 
-void CourseWidget::onDeleteClicked()
-{
-    int row = _table->currentRow();
-    if (row < 0) {
-        QMessageBox::information(this, "提示", "请先选择要删除的课程");
-        return;
-    }
-    int id = _table->item(row, 0)->text().toInt();
-    if (QMessageBox::question(this, "确认", "确定删除该课程吗？") == QMessageBox::Yes) {
-        if (DataManager::instance().deleteCourse(id))
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        "确认删除",
+        QString("确定要删除课程《%1》吗？").arg(courseName),
+        QMessageBox::Yes | QMessageBox::No
+    );
+
+    if (reply == QMessageBox::Yes) {
+        if (DataManager::instance().deleteCourse(courseId)) {
+            QMessageBox::information(this, "成功", "课程删除成功");
             refreshTable();
-        else
-            QMessageBox::warning(this, "错误", "删除失败");
+            updateGPA();
+        } else {
+            QMessageBox::critical(this, "错误", "删除失败，请重试");
+        }
     }
 }
