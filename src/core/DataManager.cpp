@@ -90,8 +90,8 @@ bool DataManager::addCourse(const Course& course)
 {
     QSqlQuery query;
     query.prepare(R"(
-        INSERT INTO courses (course_code, name, semester, credit, score, course_type, tags)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO courses (course_code, name, semester, credit, score, course_type, tags, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     )");
     query.addBindValue(course.courseCode);
     query.addBindValue(course.name);
@@ -113,7 +113,7 @@ bool DataManager::updateCourse(int id, const Course& course)
 {
     QSqlQuery query;
     query.prepare(R"(
-        UPDATE courses SET course_code=?, name=?, semester=?, credit=?, score=?, course_type=?, tags=?
+        UPDATE courses SET course_code=?, name=?, semester=?, credit=?, score=?, course_type=?, tags=?, status=?
         WHERE id=?,status=?
     )");
     query.addBindValue(course.courseCode);
