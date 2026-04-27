@@ -174,7 +174,7 @@ void CourseWidget::onUpdateClicked()
     course.semester = semester;
     course.status = status;
 
-    if (DataManager::instance().updateCourse(course)) {
+    if (DataManager::instance().updateCourse(m_currentEditId, course)) {
         QMessageBox::information(this, "成功", "课程更新成功");
         clearForm();
         setEditingMode(false);

@@ -86,6 +86,39 @@ bool DataManager::initDatabase()
 }
 
 // ========== 课程操作 ==========
+bool DataManager::updateCourse(int id, const Course& course)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE courses SET
+            course_code = ?,
+            name = ?,
+            semester = ?,
+            credit = ?,
+            score = ?,
+            course_type = ?,
+            tags = ?,
+            status = ?
+        WHERE id = ?
+    )");
+    query.addBindValue(course.courseCode);
+    query.addBindValue(course.name);
+    query.addBindValue(course.semester);
+    query.addBindValue(course.credit);
+    query.addBindValue(course.score);
+    query.addBindValue(course.courseType);
+    query.addBindValue(course.tags);
+    query.addBindValue(course.status);
+    query.addBindValue(id);
+
+    if (!query.exec()) {
+        qWarning() << "updateCourse failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
 bool DataManager::addCourse(const Course& course)
 {
     QSqlQuery query;
@@ -101,31 +134,9 @@ bool DataManager::addCourse(const Course& course)
     query.addBindValue(course.courseType);
     query.addBindValue(course.tags);
     query.addBindValue(course.status);
+
     if (!query.exec()) {
         qWarning() << "addCourse failed:" << query.lastError().text();
-        return false;
-    }
-    emit dataChanged();
-    return true;
-}
-
-bool DataManager::updateCourse(int id, const Course& course)
-{
-    QSqlQuery query;
-    query.prepare(R"(
-        UPDATE courses SET course_code=?, name=?, semester=?, credit=?, score=?, course_type=?, tags=?, status=?
-        WHERE id=?,status=?
-    )");
-    query.addBindValue(course.courseCode);
-    query.addBindValue(course.name);
-    query.addBindValue(course.semester);
-    query.addBindValue(course.credit);
-    query.addBindValue(course.score);
-    query.addBindValue(course.courseType);
-    query.addBindValue(course.tags);
-    query.addBindValue(id);
-    if (!query.exec()) {
-        qWarning() << "updateCourse failed:" << query.lastError().text();
         return false;
     }
     emit dataChanged();

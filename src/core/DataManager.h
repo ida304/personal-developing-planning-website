@@ -6,6 +6,7 @@
 #include <QList>
 #include "models.h"
 
+
 class DataManager : public QObject
 {
     Q_OBJECT

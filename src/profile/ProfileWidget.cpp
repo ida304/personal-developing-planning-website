@@ -14,6 +14,8 @@
 #include <QFile>
 #include <QUuid>
 #include <QPixmap>
+#include <QCoreApplication>
+#include <QDebug>
 
 ProfileWidget::ProfileWidget(QWidget *parent) : QWidget(parent)
 {
@@ -110,7 +112,9 @@ void ProfileWidget::onSelectPhotoClicked()
     if (!dir.exists()) dir.mkpath(".");
 
     QString suffix = QFileInfo(filePath).suffix();
-    QString uniqueName = QUuid::createUuid().toString(QUuid::WithoutBraces) + "." + suffix;
+    QString uniqueName = QUuid::createUuid().toString();
+    uniqueName.remove('{').remove('}');
+    uniqueName += "." + suffix;
     QString destPath = dir.absoluteFilePath(uniqueName);
 
     if (QFile::copy(filePath, destPath)) {
