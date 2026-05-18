@@ -27,8 +27,4 @@ struct UserProfile {
     QString photoPath;    // 相对路径
 };
 
-// 注册自定义类型到 Qt 元对象系统（可选，用于信号槽）
-Q_DECLARE_METATYPE(Course)
-Q_DECLARE_METATYPE(UserProfile)
-
 #endif // MODELS_H
