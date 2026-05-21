@@ -1,6 +1,5 @@
 #include "ResumeWidget.h"
 #include "../core/DataManager.h"
-
 #include <QVBoxLayout>
 #include <QComboBox>
 #include <QTextEdit>
@@ -9,20 +8,22 @@
 #include <QFile>
 #include <QTextStream>
 
-// 简历生成模块
-ResumeWidget::ResumeWidget(DataManager *dataManager, QWidget *parent)
-    : QWidget(parent),
-      m_dataManager(dataManager)
+ResumeWidget::ResumeWidget(QWidget *parent)
+    : QWidget(parent)
 {
     initUI();
-
     // 默认加载模板1（索引0）
     onTemplateChanged(0);
 }
 
 ResumeWidget::~ResumeWidget()
 {
+}
 
+// 外部设置DataManager
+void ResumeWidget::setDataManager(DataManager *manager)
+{
+    m_dataManager = manager;
 }
 
 void ResumeWidget::initUI()
@@ -41,7 +42,8 @@ void ResumeWidget::initUI()
 
     m_mainLayout->addWidget(m_templateSelector);
 
-    // 文本编辑框（用户可直接修改）
+    // 文本编辑框
+    //【用户可直接修改】
     m_editor = new QTextEdit(this);
     m_editor->setPlaceholderText("请在这里编辑你的简历内容...");
     m_mainLayout->addWidget(m_editor);
@@ -52,10 +54,32 @@ void ResumeWidget::onTemplateChanged(int index)
     // 可以根据不同模板加载不同的预设文本
     switch (index) {
     case 0:
-        m_editor->setText("===== 简约风简历模板 =====\n\n姓名：\n电话：\n邮箱：\n\n教育经历：\n\n工作经历：\n\n技能特长：");
+        m_editor->setText("===== 简约风简历模板 =====\n\n"
+                          "姓名: \n"
+                          "电话: \n"
+                          "邮箱: \n\n"
+                          "教育经历: \n\n"
+                          "工作经历: \n\n"
+                          "技能特长: ");
         break;
     case 1:
-        m_editor->setText("===== 专业风简历模板 =====\n\n【个人信息】\n姓名：\n联系方式：\n邮箱：\n\n【教育背景】\n学校：\n专业：\n时间：\n\n【工作经历】\n公司：\n职位：\n职责：\n\n【专业技能】\n");
+        m_editor->setText("===== 专业风简历模板 =====\n\n"
+                          "【个人信息】\n"
+                          "姓名: \n"
+                          "联系方式: \n"
+                          "邮箱: \n\n"
+                          "【教育背景】\n"
+                          "学校: \n"
+                          "专业: \n"
+                          "学位: \n\n"
+                          "【工作/项目经历】\n"
+                          "时间: \n"
+                          "公司/项目: \n"
+                          "职责与成果: \n\n"
+                          "【专业技能】\n"
+                          "编程语言: \n"
+                          "工具/软件: \n"
+                          "软技能: ");
         break;
     default:
         m_editor->clear();
