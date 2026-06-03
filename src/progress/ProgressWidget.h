@@ -12,7 +12,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFile>
-#include "core/DataManager.h"
+#include "src/core/DataManager.h"
 #include <QStandardPaths>
 
 struct ProgressSummary {

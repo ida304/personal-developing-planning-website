@@ -40,7 +40,6 @@ bool DataManager::initDatabase()
 {
     QSqlQuery query;
 
-    // 课程表
     QString createCourses = R"(
         CREATE TABLE IF NOT EXISTS courses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,7 +58,6 @@ bool DataManager::initDatabase()
         return false;
     }
 
-    // 用户资料表
     QString createProfile = R"(
         CREATE TABLE IF NOT EXISTS user_profile (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -76,7 +74,6 @@ bool DataManager::initDatabase()
         qWarning() << "Failed to create user_profile:" << query.lastError().text();
         return false;
     }
-    // 插入默认行
     query.exec("SELECT COUNT(*) FROM user_profile");
     if (query.next() && query.value(0).toInt() == 0) {
         query.exec("INSERT INTO user_profile (id) VALUES (1)");
@@ -85,7 +82,6 @@ bool DataManager::initDatabase()
     return true;
 }
 
-// ========== 课程操作 ==========
 bool DataManager::updateCourse(int id, const Course& course)
 {
     QSqlQuery query;
@@ -223,7 +219,6 @@ QList<Course> DataManager::getCoursesByFilter(const QString& keyword,
     return courses;
 }
 
-// ========== 用户资料操作 ==========
 UserProfile DataManager::getUserProfile() const
 {
     UserProfile profile;
