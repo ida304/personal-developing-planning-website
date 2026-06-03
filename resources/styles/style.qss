@@ -1,22 +1,112 @@
-/* 全局样式（简单示例） */
+/* ========== 蓝紫色主题（稳定版，无标题栏修改） ========== */
+* {
+    font-family: "Microsoft YaHei", "Segoe UI", "PingFang SC", sans-serif;
+    font-size: 14pt;
+}
+
 QWidget {
-    background-color: #f5f5f5;
-    font-family: "Microsoft YaHei";
-    font-size: 12px;
+    background-color: #f3f4f8;
+    color: #2c2e3a;
 }
 
 QPushButton {
-    background-color: #4caf50;
+    background-color: #8b85ff;
     color: white;
     border: none;
-    padding: 5px 12px;
-    border-radius: 4px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    min-width: 80px;
+    font-weight: bold;
 }
 QPushButton:hover {
-    background-color: #45a049;
+    background-color: #6c63ff;
+}
+QPushButton:pressed {
+    background-color: #5a52d9;
+}
+
+QLineEdit, QComboBox, QTextEdit, QSpinBox {
+    background-color: white;
+    border: 1px solid #cdd0e0;
+    border-radius: 6px;
+    padding: 5px 8px;
+}
+QLineEdit:focus, QComboBox:focus {
+    border-color: #8b85ff;
 }
 
 QTableWidget {
-    alternate-background-color: #f9f9f9;
-    selection-background-color: #b0d3b0;
+    background-color: white;
+    alternate-background-color: #f8f9ff;
+    gridline-color: #e5e7f0;
+    selection-background-color: #d9d7ff;
+    selection-color: #2c2e3a;
+    border: 1px solid #e0e2ec;
+    border-radius: 8px;
+}
+QHeaderView::section {
+    background-color: #f0f1f9;
+    padding: 8px;
+    border: none;
+    border-bottom: 1px solid #d9dbe8;
+    font-weight: bold;
+    color: #4c4f6e;
+    font-size: 13pt;
+}
+
+QTabWidget::pane {
+    border: 1px solid #d9dbe8;
+    background-color: white;
+    border-radius: 8px;
+}
+QTabBar::tab {
+    background: #e3e5f0;
+    padding: 8px 24px;
+    margin-right: 4px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    font-size: 13pt;
+}
+QTabBar::tab:selected {
+    background: white;
+    color: #6c63ff;
+    border-bottom: 2px solid #6c63ff;
+    font-weight: bold;
+}
+QTabBar::tab:hover {
+    background: #d1d4e2;
+}
+
+/* 分组框 - 标题完全在边框内部（不露头） */
+QGroupBox {
+    border: 1px solid #d9dbe8;
+    border-radius: 16px;
+    background-color: white;
+    /* 不要 margin-top 和 padding-top */
+}
+
+
+/* 进度条 */
+QProgressBar {
+    height: 24px;
+    border-radius: 8px;
+    background-color: #eef0f7;
+    text-align: center;
+    color: #2c2e3a;
+    font-weight: bold;
+}
+QProgressBar::chunk {
+    background-color: #8b85ff;
+    border-radius: 8px;
+}
+
+QLabel {
+    color: #3a3c4e;
+    font-size: 13pt;
+}
+
+QCheckBox {
+    color: #3a3c4e;
+    font-size: 13pt;
+    spacing: 8px;
 }

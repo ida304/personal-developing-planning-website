@@ -16,7 +16,8 @@ SOURCES += \
     src/course/CourseWidget.cpp \
     src/experience_achievement/ExpAchieveWidget.cpp \
     src/resume/ResumeWidget.cpp \
-    src/progress/ProgressWidget.cpp
+    src/progress/ProgressWidget.cpp \
+    src/homepage.cpp
 
 # 头文件
 HEADERS += \
@@ -28,7 +29,8 @@ HEADERS += \
     src/course/CourseWidget.h \
     src/experience_achievement/ExpAchieveWidget.h \
     src/resume/ResumeWidget.h \
-    src/progress/ProgressWidget.h
+    src/progress/ProgressWidget.h \
+    src/homepage.h
 
 # 资源文件（包含样式、模板、JSON配置）
 RESOURCES += resources/resources.qrc
