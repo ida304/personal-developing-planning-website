@@ -1,0 +1,392 @@
+#include "DataManager.h"
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QDir>
+#include <QCoreApplication>
+#include <QDebug>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+
+DataManager::DataManager(QObject *parent) : QObject(parent)
+{
+    openDatabase();
+}
+
+DataManager::~DataManager()
+{
+    if (m_db.isOpen()) m_db.close();
+}
+
+DataManager& DataManager::instance()
+{
+    static DataManager instance;
+    return instance;
+}
+
+bool DataManager::openDatabase()
+{
+    QString dataDir = QCoreApplication::applicationDirPath() + "/data";
+    QDir dir;
+    if (!dir.exists(dataDir)) dir.mkpath(dataDir);
+    QString dbPath = dataDir + "/app.db";
+    m_db = QSqlDatabase::addDatabase("QSQLITE");
+    m_db.setDatabaseName(dbPath);
+    if (!m_db.open()) {
+        qWarning() << "Failed to open database:" << m_db.lastError().text();
+        return false;
+    }
+    return initDatabase();
+}
+
+bool DataManager::initDatabase()
+{
+    QSqlQuery query;
+
+    // 课程表
+    QString createCourses = R"(
+        CREATE TABLE IF NOT EXISTS courses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            course_code TEXT,
+            name TEXT NOT NULL,
+            semester TEXT NOT NULL,
+            credit REAL NOT NULL,
+            score REAL NOT NULL,
+            course_type TEXT NOT NULL,
+            tags TEXT,
+            status TEXT DEFAULT '已修'
+        )
+    )";
+    if (!query.exec(createCourses)) {
+        qWarning() << "Failed to create courses:" << query.lastError().text();
+        return false;
+    }
+
+    // 用户资料表
+    QString createProfile = R"(
+        CREATE TABLE IF NOT EXISTS user_profile (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            name TEXT,
+            school TEXT,
+            college TEXT,
+            major TEXT,
+            grade TEXT,
+            education TEXT,
+            photo_path TEXT
+        )
+    )";
+    if (!query.exec(createProfile)) {
+        qWarning() << "Failed to create user_profile:" << query.lastError().text();
+        return false;
+    }
+    query.exec("SELECT COUNT(*) FROM user_profile");
+    if (query.next() && query.value(0).toInt() == 0) {
+        query.exec("INSERT INTO user_profile (id) VALUES (1)");
+    }
+
+    // 成就表（与 ExpAchieveWidget 中使用的表结构一致）
+    QString createAchievements = R"(
+        CREATE TABLE IF NOT EXISTS achievement (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            level TEXT,
+            date TEXT,
+            tags TEXT,
+            filePath TEXT
+        )
+    )";
+    if (!query.exec(createAchievements)) {
+        qWarning() << "Failed to create achievement:" << query.lastError().text();
+    }
+
+    return true;
+}
+
+// ========== 课程操作 ==========
+bool DataManager::updateCourse(int id, const Course& course)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE courses SET
+            course_code = ?,
+            name = ?,
+            semester = ?,
+            credit = ?,
+            score = ?,
+            course_type = ?,
+            tags = ?,
+            status = ?
+        WHERE id = ?
+    )");
+    query.addBindValue(course.courseCode);
+    query.addBindValue(course.name);
+    query.addBindValue(course.semester);
+    query.addBindValue(course.credit);
+    query.addBindValue(course.score);
+    query.addBindValue(course.courseType);
+    query.addBindValue(course.tags);
+    query.addBindValue(course.status);
+    query.addBindValue(id);
+
+    if (!query.exec()) {
+        qWarning() << "updateCourse failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
+bool DataManager::addCourse(const Course& course)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO courses (course_code, name, semester, credit, score, course_type, tags, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    )");
+    query.addBindValue(course.courseCode);
+    query.addBindValue(course.name);
+    query.addBindValue(course.semester);
+    query.addBindValue(course.credit);
+    query.addBindValue(course.score);
+    query.addBindValue(course.courseType);
+    query.addBindValue(course.tags);
+    query.addBindValue(course.status);
+
+    if (!query.exec()) {
+        qWarning() << "addCourse failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
+bool DataManager::deleteCourse(int id)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM courses WHERE id=?");
+    query.addBindValue(id);
+    if (!query.exec()) {
+        qWarning() << "deleteCourse failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
+QList<Course> DataManager::getAllCourses() const
+{
+    return getCoursesByFilter();
+}
+
+QList<Course> DataManager::searchCourses(const QString& keyword, const QString& field) const
+{
+    QList<Course> result;
+    QString sql = "SELECT id, course_code, name, semester, credit, score, course_type, tags FROM courses WHERE ";
+    if (field == "name") {
+        sql += "name LIKE '%" + keyword + "%'";
+    } else if (field == "code") {
+        sql += "course_code LIKE '%" + keyword + "%'";
+    } else {
+        return result;
+    }
+    QSqlQuery query(sql);
+    while (query.next()) {
+        Course c;
+        c.id = query.value(0).toInt();
+        c.courseCode = query.value(1).toString();
+        c.name = query.value(2).toString();
+        c.semester = query.value(3).toString();
+        c.credit = query.value(4).toDouble();
+        c.score = query.value(5).toDouble();
+        c.courseType = query.value(6).toString();
+        c.tags = query.value(7).toString();
+        result.append(c);
+    }
+    return result;
+}
+
+QList<Course> DataManager::getCoursesByFilter(const QString& keyword,
+                                              const QString& semester,
+                                              const QString& courseType,
+                                              const QString& tagKeyword) const
+{
+    QList<Course> courses;
+    QString sql = "SELECT id, course_code, name, semester, credit, score, course_type, tags FROM courses WHERE 1=1";
+    if (!keyword.isEmpty()) {
+        sql += " AND (name LIKE '%" + keyword + "%' OR course_code LIKE '%" + keyword + "%')";
+    }
+    if (!semester.isEmpty()) {
+        sql += " AND semester = '" + semester + "'";
+    }
+    if (!courseType.isEmpty()) {
+        sql += " AND course_type = '" + courseType + "'";
+    }
+    if (!tagKeyword.isEmpty()) {
+        sql += " AND tags LIKE '%" + tagKeyword + "%'";
+    }
+    QSqlQuery query(sql);
+    while (query.next()) {
+        Course c;
+        c.id = query.value(0).toInt();
+        c.courseCode = query.value(1).toString();
+        c.name = query.value(2).toString();
+        c.semester = query.value(3).toString();
+        c.credit = query.value(4).toDouble();
+        c.score = query.value(5).toDouble();
+        c.courseType = query.value(6).toString();
+        c.tags = query.value(7).toString();
+        courses.append(c);
+    }
+    return courses;
+}
+
+// ========== 用户资料操作 ==========
+UserProfile DataManager::getUserProfile() const
+{
+    UserProfile profile;
+    QSqlQuery query("SELECT name, school, college, major, grade, education, photo_path FROM user_profile WHERE id=1");
+    if (query.next()) {
+        profile.name = query.value(0).toString();
+        profile.school = query.value(1).toString();
+        profile.college = query.value(2).toString();
+        profile.major = query.value(3).toString();
+        profile.grade = query.value(4).toString();
+        profile.education = query.value(5).toString();
+        profile.photoPath = query.value(6).toString();
+    }
+    return profile;
+}
+
+bool DataManager::saveUserProfile(const UserProfile& profile)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE user_profile SET name=?, school=?, college=?, major=?, grade=?, education=?, photo_path=?
+        WHERE id=1
+    )");
+    query.addBindValue(profile.name);
+    query.addBindValue(profile.school);
+    query.addBindValue(profile.college);
+    query.addBindValue(profile.major);
+    query.addBindValue(profile.grade);
+    query.addBindValue(profile.education);
+    query.addBindValue(profile.photoPath);
+    if (!query.exec()) {
+        qWarning() << "saveUserProfile failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
+// ========== 成就操作 ==========
+bool DataManager::addAchievement(const Achievement& ach)
+{
+    QSqlQuery query;
+    query.prepare("INSERT INTO achievement (name, level, date, tags, filePath) VALUES (?, ?, ?, ?, ?)");
+    query.addBindValue(ach.name);
+    query.addBindValue(ach.level);
+    query.addBindValue(ach.obtainDate.toString(Qt::ISODate));
+    query.addBindValue(ach.tags.join(","));
+    query.addBindValue(ach.materialPath);
+    if (!query.exec()) {
+        qWarning() << "addAchievement failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
+bool DataManager::updateAchievement(int id, const Achievement& ach)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE achievement SET name=?, level=?, date=?, tags=?, filePath=? WHERE id=?");
+    query.addBindValue(ach.name);
+    query.addBindValue(ach.level);
+    query.addBindValue(ach.obtainDate.toString(Qt::ISODate));
+    query.addBindValue(ach.tags.join(","));
+    query.addBindValue(ach.materialPath);
+    query.addBindValue(id);
+    if (!query.exec()) {
+        qWarning() << "updateAchievement failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
+bool DataManager::deleteAchievement(int id)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM achievement WHERE id=?");
+    query.addBindValue(id);
+    if (!query.exec()) {
+        qWarning() << "deleteAchievement failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
+QList<Achievement> DataManager::getAllAchievements() const
+{
+    QList<Achievement> achievements;
+    QSqlQuery query("SELECT id, name, level, date, tags, filePath FROM achievement ORDER BY date DESC");
+    while (query.next()) {
+        Achievement ach;
+        ach.id = query.value(0).toInt();
+        ach.name = query.value(1).toString();
+        ach.level = query.value(2).toString();
+        ach.obtainDate = QDate::fromString(query.value(3).toString(), Qt::ISODate);
+        QString tagsStr = query.value(4).toString();
+        if (!tagsStr.isEmpty()) {
+            ach.tags = tagsStr.split(",", Qt::SkipEmptyParts);
+        }
+        ach.materialPath = query.value(5).toString();
+        achievements.append(ach);
+    }
+    return achievements;
+}
+
+// ========== 毕业要求统计 ==========
+QList<Requirement> DataManager::getRequirements() const
+{
+    QList<Requirement> requirements;
+
+    // 1. 从资源文件加载毕业要求总学分
+    QFile file(":/data/graduation_reqs.json");
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "Failed to open graduation_reqs.json";
+        return requirements;
+    }
+    QByteArray data = file.readAll();
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (doc.isNull()) {
+        qWarning() << "Invalid JSON in graduation_reqs.json";
+        return requirements;
+    }
+    QJsonObject root = doc.object();
+    for (const QString& key : root.keys()) {
+        Requirement req;
+        req.category = key;
+        req.requiredCredits = root[key].toDouble();
+        req.earnedCredits = 0.0;
+        requirements.append(req);
+    }
+    file.close();
+
+    // 2. 获取所有课程，累加已修学分（成绩≥60）
+    QList<Course> courses = getAllCourses();
+    for (const Course& c : courses) {
+        if (c.status == "已修" && c.score >= 60) {
+            for (Requirement& req : requirements) {
+                if (req.category == c.courseType) {
+                    req.earnedCredits += c.credit;
+                    break;
+                }
+            }
+        }
+    }
+
+    return requirements;
+}
