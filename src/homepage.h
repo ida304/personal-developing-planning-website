@@ -28,10 +28,11 @@ private slots:
     void onViewAllAchievements();
     void onViewAllCourses();
     void refreshAll();
+    void refreshUserInfo();          // 队友新增：单独刷新个人信息
 
 private:
     void setupUI();
-    void loadUserInfo();
+    void loadUserInfo();             // 从 DataManager 读取
     void loadAcademicStats();
     void loadProgress();
     void loadTodos();
@@ -41,8 +42,8 @@ private:
     QLabel *m_gpaLabel, *m_creditsLabel, *m_passRateLabel;
     QVBoxLayout *m_progressLayout;
     QVBoxLayout *m_todoLayout;
-    QVBoxLayout *m_achievementLayout;   // 成就列表布局（放在滚动区域内）
-    QVBoxLayout *m_courseLayout;        // 课程列表布局（放在滚动区域内）
+    QVBoxLayout *m_achievementLayout;
+    QVBoxLayout *m_courseLayout;
 };
 
 #endif // HOMEPAGE_H

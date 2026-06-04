@@ -28,6 +28,10 @@ void HomePage::refreshAll()
     loadProgress();
     loadTodos();
     loadRecent();
+
+    // 监听个人信息变化，自动刷新
+    connect(&DataManager::instance(), &DataManager::dataChanged,
+            this, &HomePage::refreshUserInfo);
 }
 
 void HomePage::setupUI()
@@ -221,6 +225,12 @@ void HomePage::loadUserInfo()
     m_majorLabel->setText(profile.major.isEmpty() ? "未填写" : profile.major);
     m_gradeLabel->setText(profile.grade.isEmpty() ? "未填写" : profile.grade);
     m_degreeLabel->setText(profile.education.isEmpty() ? "未填写" : profile.education);
+}
+
+void HomePage::refreshUserInfo()
+{
+    loadUserInfo();   // 重新加载个人信息
+    // 如果将来还需要刷新其他数据（如 GPA、进度等），也可以在这里调用
 }
 
 void HomePage::loadAcademicStats()
