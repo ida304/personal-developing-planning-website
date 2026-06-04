@@ -26,6 +26,13 @@ public:
 
     UserProfile getUserProfile() const;
     bool saveUserProfile(const UserProfile& profile);
+    // 成就管理
+    bool addAchievement(const Achievement& ach);
+    bool updateAchievement(int id, const Achievement& ach);
+    bool deleteAchievement(int id);
+    QList<Achievement> getAllAchievements() const;
+    // DataManager.h 中
+    QList<Requirement> getRequirements() const;
 
 signals:
     void dataChanged();

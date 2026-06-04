@@ -9,6 +9,7 @@
 #include <QGroupBox>
 #include <QProgressBar>
 #include <QCheckBox>
+#include <QScrollArea>
 
 class HomePage : public QWidget
 {
@@ -17,27 +18,31 @@ public:
     explicit HomePage(QWidget *parent = nullptr);
 
 signals:
-    void switchToTab(int index);  // 切换到其他页面
+    void switchToTab(int index);
 
 private slots:
     void onEditProfile();
     void onAddCourse();
     void onExportResume();
     void onViewAllProgress();
+    void onViewAllAchievements();
+    void onViewAllCourses();
+    void refreshAll();
 
 private:
     void setupUI();
-    void loadUserInfo();      // 写死数据
-    void loadAcademicStats(); // 写死数据
-    void loadProgress();      // 写死进度条
-    void loadTodos();         // 写死待办
-    void loadRecent();        // 写死最近活动
+    void loadUserInfo();
+    void loadAcademicStats();
+    void loadProgress();
+    void loadTodos();
+    void loadRecent();
 
     QLabel *m_nameLabel, *m_schoolLabel, *m_collegeLabel, *m_majorLabel, *m_gradeLabel, *m_degreeLabel;
     QLabel *m_gpaLabel, *m_creditsLabel, *m_passRateLabel;
     QVBoxLayout *m_progressLayout;
     QVBoxLayout *m_todoLayout;
-    QHBoxLayout *m_recentLayout;
+    QVBoxLayout *m_achievementLayout;   // 成就列表布局（放在滚动区域内）
+    QVBoxLayout *m_courseLayout;        // 课程列表布局（放在滚动区域内）
 };
 
 #endif // HOMEPAGE_H

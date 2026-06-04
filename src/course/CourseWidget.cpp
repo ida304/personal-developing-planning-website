@@ -1,14 +1,22 @@
 #include "CourseWidget.h"
-#include "src/core/DataManager.h"
+#include "core/DataManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
 #include <QMessageBox>
 #include <QDebug>
+#include <QHeaderView>
 
 CourseWidget::CourseWidget(QWidget *parent) : QWidget(parent), m_currentEditId(-1)
 {
-    // ========== 1. 创建表单区域 ==========
+    setupUI();
+    refreshTable();
+    updateGPA();
+}
+
+void CourseWidget::setupUI()
+{
+    // 表单区域
     QFormLayout *formLayout = new QFormLayout();
 
     m_nameEdit = new QLineEdit;
@@ -28,7 +36,6 @@ CourseWidget::CourseWidget(QWidget *parent) : QWidget(parent), m_currentEditId(-
 
     m_tagsEdit = new QLineEdit;
 
-    // 学期下拉框：可手动输入，预设多个常用学期
     m_semesterCombo = new QComboBox;
     m_semesterCombo->setEditable(true);
     m_semesterCombo->addItems({
@@ -56,7 +63,7 @@ CourseWidget::CourseWidget(QWidget *parent) : QWidget(parent), m_currentEditId(-
     btnLayout->addWidget(m_addBtn);
     btnLayout->addWidget(m_updateBtn);
 
-    // ========== 2. 搜索区域 ==========
+    // 搜索区域
     m_searchEdit = new QLineEdit;
     m_searchEdit->setPlaceholderText("输入关键词...");
     m_searchFieldCombo = new QComboBox;
@@ -70,16 +77,19 @@ CourseWidget::CourseWidget(QWidget *parent) : QWidget(parent), m_currentEditId(-
     searchLayout->addWidget(m_searchBtn);
     searchLayout->addStretch();
 
-    // ========== 3. 创建表格区域 ==========
+    // 表格
     m_tableWidget = new QTableWidget;
     m_tableWidget->setColumnCount(8);
     m_tableWidget->setHorizontalHeaderLabels({"课程名", "学分", "成绩", "类型", "标签", "学期", "状态", "操作"});
 
-    // ========== 4. GPA显示区域 ==========
+    // 设置水平滚动条（以便内容过多时滚动，但我们会尽量填满）
+    m_tableWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+    // GPA显示
     m_gpaLabel = new QLabel("当前加权GPA: 0.00");
     m_gpaLabel->setStyleSheet("font-size: 14px; font-weight: bold; color: #4caf50;");
 
-    // ========== 5. 布局 ==========
+    // 主布局
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->addLayout(formLayout);
     mainLayout->addLayout(btnLayout);
@@ -87,14 +97,10 @@ CourseWidget::CourseWidget(QWidget *parent) : QWidget(parent), m_currentEditId(-
     mainLayout->addWidget(m_tableWidget);
     mainLayout->addWidget(m_gpaLabel);
 
-    // ========== 6. 连接信号 ==========
+    // 信号连接
     connect(m_addBtn, &QPushButton::clicked, this, &CourseWidget::onAddClicked);
     connect(m_updateBtn, &QPushButton::clicked, this, &CourseWidget::onUpdateClicked);
     connect(m_searchBtn, &QPushButton::clicked, this, &CourseWidget::onSearchClicked);
-
-    // ========== 7. 初始化 ==========
-    refreshTable();
-    updateGPA();
 }
 
 void CourseWidget::onAddClicked()
@@ -203,7 +209,6 @@ void CourseWidget::refreshTable(const QString& keyword, const QString& field)
     QList<Course> allCourses = DataManager::instance().getAllCourses();
     QList<Course> courses;
 
-    // 如果有搜索条件，进行过滤
     if (!keyword.isEmpty() && !field.isEmpty()) {
         for (const Course& c : allCourses) {
             bool match = false;
@@ -214,9 +219,7 @@ void CourseWidget::refreshTable(const QString& keyword, const QString& field)
             } else if (field == "courseType") {
                 match = c.courseType.contains(keyword, Qt::CaseInsensitive);
             }
-            if (match) {
-                courses.append(c);
-            }
+            if (match) courses.append(c);
         }
     } else {
         courses = allCourses;
@@ -236,33 +239,63 @@ void CourseWidget::refreshTable(const QString& keyword, const QString& field)
         QWidget *btnWidget = new QWidget;
         QHBoxLayout *btnLayout = new QHBoxLayout(btnWidget);
         btnLayout->setContentsMargins(5, 0, 5, 0);
-
         QPushButton *editBtn = new QPushButton("编辑");
         QPushButton *delBtn = new QPushButton("删除");
-
+        editBtn->setFixedWidth(60);
+        delBtn->setFixedWidth(60);
         btnLayout->addWidget(editBtn);
         btnLayout->addWidget(delBtn);
-
         m_tableWidget->setCellWidget(i, 7, btnWidget);
 
-        connect(editBtn, &QPushButton::clicked, this, [this, i]() {
-            onEditClicked(i);
-        });
+        connect(editBtn, &QPushButton::clicked, this, [this, i]() { onEditClicked(i); });
+        connect(delBtn, &QPushButton::clicked, this, [this, c]() { onDeleteClicked(c.id); });
+    }
 
-        int courseId = c.id;
-        connect(delBtn, &QPushButton::clicked, this, [this, courseId]() {
-            onDeleteClicked(courseId);
-        });
+    // 设置列宽：先根据内容自动调整
+    QHeaderView *header = m_tableWidget->horizontalHeader();
+    for (int i = 0; i < m_tableWidget->columnCount(); ++i) {
+        header->setSectionResizeMode(i, QHeaderView::ResizeToContents);
+    }
+    m_tableWidget->resizeColumnsToContents();
+
+    // 获取表格可视区域宽度
+    int viewWidth = m_tableWidget->viewport()->width();
+    // 计算当前所有列宽总和
+    int totalWidth = 0;
+    QVector<int> colWidths(m_tableWidget->columnCount());
+    for (int i = 0; i < m_tableWidget->columnCount(); ++i) {
+        colWidths[i] = m_tableWidget->columnWidth(i);
+        totalWidth += colWidths[i];
+    }
+
+    // 如果总宽度小于可视宽度，按比例分配剩余空间
+    if (totalWidth < viewWidth) {
+        int remaining = viewWidth - totalWidth;
+        double scale = 1.0;
+        for (int i = 0; i < m_tableWidget->columnCount(); ++i) {
+            double ratio = (double)colWidths[i] / totalWidth;
+            int extra = qRound(remaining * ratio);
+            colWidths[i] += extra;
+        }
+        // 由于取整可能仍有少量偏差，将余数加到最后一列
+        int newTotal = 0;
+        for (int i = 0; i < m_tableWidget->columnCount(); ++i) newTotal += colWidths[i];
+        int diff = viewWidth - newTotal;
+        if (diff != 0 && m_tableWidget->columnCount() > 0) {
+            colWidths[m_tableWidget->columnCount()-1] += diff;
+        }
+        // 应用新宽度
+        for (int i = 0; i < m_tableWidget->columnCount(); ++i) {
+            m_tableWidget->setColumnWidth(i, colWidths[i]);
+        }
     }
 }
-
 void CourseWidget::onEditClicked(int row)
 {
     QList<Course> courses = DataManager::instance().getAllCourses();
     if (row < 0 || row >= courses.size()) return;
 
     const Course& c = courses[row];
-
     m_nameEdit->setText(c.name);
     m_creditSpin->setValue(c.credit);
     m_scoreSpin->setValue(c.score);
@@ -270,19 +303,15 @@ void CourseWidget::onEditClicked(int row)
     m_tagsEdit->setText(c.tags);
     m_semesterCombo->setCurrentText(c.semester);
     m_statusCombo->setCurrentText(c.status);
-
     setEditingMode(true, c.id);
 }
 
 void CourseWidget::updateGPA()
 {
     QList<Course> courses = DataManager::instance().getAllCourses();
-    double totalPoints = 0.0;
-    double totalCredits = 0.0;
-
+    double totalPoints = 0.0, totalCredits = 0.0;
     for (const Course& c : courses) {
         if (c.status != "已修") continue;
-
         double gp = 0.0;
         if (c.score >= 90) gp = 4.0;
         else if (c.score >= 85) gp = 3.7;
@@ -294,11 +323,9 @@ void CourseWidget::updateGPA()
         else if (c.score >= 64) gp = 1.5;
         else if (c.score >= 60) gp = 1.0;
         else gp = 0.0;
-
         totalPoints += gp * c.credit;
         totalCredits += c.credit;
     }
-
     double gpa = (totalCredits > 0) ? totalPoints / totalCredits : 0.0;
     m_gpaLabel->setText(QString("当前加权GPA: %1").arg(gpa, 0, 'f', 2));
 }
@@ -330,14 +357,9 @@ void CourseWidget::onDeleteClicked(int courseId)
             break;
         }
     }
-
     QMessageBox::StandardButton reply = QMessageBox::question(
-        this,
-        "确认删除",
-        QString("确定要删除课程《%1》吗？").arg(courseName),
-        QMessageBox::Yes | QMessageBox::No
-    );
-
+        this, "确认删除", QString("确定要删除课程《%1》吗？").arg(courseName),
+        QMessageBox::Yes | QMessageBox::No);
     if (reply == QMessageBox::Yes) {
         if (DataManager::instance().deleteCourse(courseId)) {
             QMessageBox::information(this, "成功", "课程删除成功");
