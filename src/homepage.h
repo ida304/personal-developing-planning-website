@@ -9,6 +9,7 @@
 #include <QGroupBox>
 #include <QProgressBar>
 #include <QCheckBox>
+#include "core/DataManager.h"
 
 class HomePage : public QWidget
 {
@@ -24,14 +25,15 @@ private slots:
     void onAddCourse();
     void onExportResume();
     void onViewAllProgress();
+    void refreshUserInfo();
 
 private:
     void setupUI();
-    void loadUserInfo();      // 写死数据
-    void loadAcademicStats(); // 写死数据
-    void loadProgress();      // 写死进度条
-    void loadTodos();         // 写死待办
-    void loadRecent();        // 写死最近活动
+    void loadUserInfo();      // 从 DataManager 读取
+    void loadAcademicStats();
+    void loadProgress();
+    void loadTodos();
+    void loadRecent();
 
     QLabel *m_nameLabel, *m_schoolLabel, *m_collegeLabel, *m_majorLabel, *m_gradeLabel, *m_degreeLabel;
     QLabel *m_gpaLabel, *m_creditsLabel, *m_passRateLabel;
