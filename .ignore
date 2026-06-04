@@ -1,3 +1,7 @@
+*.pro.user
+*.pro.user*
+
+
 # 构建目录（Qt Creator 默认会在源码目录外或内创建 build- 文件夹）
 build-*/
 *-build/
