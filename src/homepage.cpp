@@ -1,4 +1,8 @@
+<<<<<<< HEAD
+#include "homepage.h"
+=======
 #include "HomePage.h"
+>>>>>>> origin/main
 #include "core/DataManager.h"
 #include "core/models.h"                     // 新增：引入 Requirement 结构体
 #include <QFormLayout>
@@ -321,7 +325,11 @@ void HomePage::loadRecent()
     QList<Achievement> achievements = DataManager::instance().getAllAchievements();
     std::sort(achievements.begin(), achievements.end(),
               [](const Achievement& a, const Achievement& b) { return a.obtainDate > b.obtainDate; });
+<<<<<<< HEAD
+    int achCount = std::min(5, static_cast<int>(achievements.size()));
+=======
     int achCount = std::min(5, achievements.size());
+>>>>>>> origin/main
     for (int i = 0; i < achCount; ++i) {
         const Achievement& ach = achievements[i];
         QString display = QString("%1  %2").arg(ach.name).arg(ach.obtainDate.toString("yyyy-MM-dd"));
@@ -341,7 +349,11 @@ void HomePage::loadRecent()
     QList<Course> courses = DataManager::instance().getAllCourses();
     std::sort(courses.begin(), courses.end(),
               [](const Course& a, const Course& b) { return a.id > b.id; });
+<<<<<<< HEAD
+    int courseCount = std::min(5, static_cast<int>(courses.size()));
+=======
     int courseCount = std::min(5, courses.size());
+>>>>>>> origin/main
     for (int i = 0; i < courseCount; ++i) {
         const Course& c = courses[i];
         QLabel *label = new QLabel(QString("📚 %1（%2）").arg(c.name).arg(c.semester));
