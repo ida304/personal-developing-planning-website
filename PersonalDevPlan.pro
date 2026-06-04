@@ -35,5 +35,6 @@ HEADERS += \
 # 资源文件（包含样式、模板、JSON配置）
 RESOURCES += resources/resources.qrc
 
+INCLUDEPATH += src
 # 默认规则
 DEFAULT_RULES

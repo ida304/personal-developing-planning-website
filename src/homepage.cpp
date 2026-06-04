@@ -1,4 +1,6 @@
 #include "HomePage.h"
+#include "core/DataManager.h"
+#include "core/models.h"                     // 新增：引入 Requirement 结构体
 #include <QFormLayout>
 #include <QDate>
 #include <QVBoxLayout>
@@ -8,11 +10,19 @@
 #include <QProgressBar>
 #include <QCheckBox>
 #include <QGroupBox>
-#include "core/DataManager.h"
+#include <QScrollArea>
+#include <algorithm>
 
 HomePage::HomePage(QWidget *parent) : QWidget(parent)
 {
     setupUI();
+    connect(&DataManager::instance(), &DataManager::dataChanged,
+            this, &HomePage::refreshAll);
+    refreshAll();
+}
+
+void HomePage::refreshAll()
+{
     loadUserInfo();
     loadAcademicStats();
     loadProgress();
@@ -26,7 +36,14 @@ HomePage::HomePage(QWidget *parent) : QWidget(parent)
 
 void HomePage::setupUI()
 {
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    QScrollArea *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setStyleSheet("QScrollArea { border: none; background-color: transparent; }");
+
+    QWidget *contentWidget = new QWidget;
+    QVBoxLayout *mainLayout = new QVBoxLayout(contentWidget);
     mainLayout->setSpacing(20);
     mainLayout->setContentsMargins(20, 20, 20, 20);
 
@@ -58,7 +75,7 @@ void HomePage::setupUI()
     QPushButton *editBtn = new QPushButton("编辑资料");
     connect(editBtn, &QPushButton::clicked, this, &HomePage::onEditProfile);
     infoLayout->addWidget(editBtn, 0, Qt::AlignRight);
-    infoLayout->addStretch();   // 补：使卡片内容顶部对齐，底部自动填充
+    infoLayout->addStretch();
 
     // 学业概况卡片
     QGroupBox *academicCard = new QGroupBox;
@@ -76,7 +93,7 @@ void HomePage::setupUI()
     academicLayout->addWidget(m_gpaLabel);
     academicLayout->addWidget(m_creditsLabel);
     academicLayout->addWidget(m_passRateLabel);
-    academicLayout->addStretch();   // 补：使卡片内容顶部对齐，底部自动填充
+    academicLayout->addStretch();
 
     topRow->addWidget(infoCard);
     topRow->addWidget(academicCard);
@@ -100,9 +117,10 @@ void HomePage::setupUI()
     m_progressLayout->setSpacing(12);
     progressCardLayout->addLayout(m_progressLayout);
     QPushButton *viewAllBtn = new QPushButton("查看全部");
+    viewAllBtn->setStyleSheet("QPushButton { background-color: #8b85ff; color: white; border: none; padding: 6px 14px; border-radius: 6px; }");
     connect(viewAllBtn, &QPushButton::clicked, this, &HomePage::onViewAllProgress);
     progressCardLayout->addWidget(viewAllBtn, 0, Qt::AlignRight);
-    progressCardLayout->addStretch();   // 确保卡片内部拉伸
+    progressCardLayout->addStretch();
 
     // 待办事项卡片
     QGroupBox *todoCard = new QGroupBox;
@@ -117,38 +135,85 @@ void HomePage::setupUI()
     m_todoLayout = new QVBoxLayout;
     m_todoLayout->setSpacing(8);
     todoCardLayout->addLayout(m_todoLayout);
-    todoCardLayout->addStretch();       // 确保卡片内部拉伸
+    todoCardLayout->addStretch();
 
     middleRow->addWidget(progressCard);
     middleRow->addWidget(todoCard);
     mainLayout->addLayout(middleRow);
 
-    // ========== 第三行：最近活动 ==========
-    QGroupBox *recentCard = new QGroupBox;
-    recentCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    recentCard->setStyleSheet("QGroupBox { border: 1px solid #d9dbe8; border-radius: 16px; background-color: white; }");
-    QVBoxLayout *recentCardLayout = new QVBoxLayout(recentCard);
-    recentCardLayout->setContentsMargins(15, 15, 15, 15);
-    recentCardLayout->setSpacing(10);
-    QLabel *recentTitle = new QLabel("最近活动");
-    recentTitle->setStyleSheet("font-size: 14pt; font-weight: bold; color: #6c63ff;");
-    recentCardLayout->addWidget(recentTitle);
-    m_recentLayout = new QHBoxLayout;
-    m_recentLayout->setSpacing(15);
-    recentCardLayout->addLayout(m_recentLayout);
-    recentCardLayout->addStretch();   // 让最近活动卡片内部内容顶部对齐，底部留白
-    mainLayout->addWidget(recentCard);
+    // ========== 第三行：两个独立卡片（近期成就和近期课程） ==========
+    QHBoxLayout *recentRow = new QHBoxLayout;
+    recentRow->setSpacing(20);
+
+    // ---- 成就卡片 ----
+    QGroupBox *achievementCard = new QGroupBox;
+    achievementCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    achievementCard->setStyleSheet("QGroupBox { border: 1px solid #d9dbe8; border-radius: 16px; background-color: white; }");
+    QVBoxLayout *achievementLayout = new QVBoxLayout(achievementCard);
+    achievementLayout->setContentsMargins(15, 15, 15, 15);
+    achievementLayout->setSpacing(10);
+
+    QLabel *achieveTitle = new QLabel("📌 近期成就与经历");
+    achieveTitle->setStyleSheet("font-size: 14pt; font-weight: bold; color: #6c63ff;");
+    achievementLayout->addWidget(achieveTitle);
+
+    m_achievementLayout = new QVBoxLayout;
+    m_achievementLayout->setSpacing(8);
+    achievementLayout->addLayout(m_achievementLayout);
+
+    // 弹性空间，将按钮推到底部
+    achievementLayout->addStretch();
+
+    QPushButton *manageAchieveBtn = new QPushButton("管理成就与经历");
+    manageAchieveBtn->setStyleSheet("QPushButton { background-color: #8b85ff; color: white; border: none; padding: 6px 14px; border-radius: 6px; }");
+    connect(manageAchieveBtn, &QPushButton::clicked, this, &HomePage::onViewAllAchievements);
+    achievementLayout->addWidget(manageAchieveBtn, 0, Qt::AlignRight);
+
+    // ---- 课程卡片 ----
+    QGroupBox *courseCard = new QGroupBox;
+    courseCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    courseCard->setStyleSheet("QGroupBox { border: 1px solid #d9dbe8; border-radius: 16px; background-color: white; }");
+    QVBoxLayout *courseLayout = new QVBoxLayout(courseCard);
+    courseLayout->setContentsMargins(15, 15, 15, 15);
+    courseLayout->setSpacing(10);
+
+    QLabel *courseTitle = new QLabel("📚 近期课程");
+    courseTitle->setStyleSheet("font-size: 14pt; font-weight: bold; color: #6c63ff;");
+    courseLayout->addWidget(courseTitle);
+
+    m_courseLayout = new QVBoxLayout;
+    m_courseLayout->setSpacing(8);
+    courseLayout->addLayout(m_courseLayout);
+
+    courseLayout->addStretch();
+
+    QPushButton *manageCourseBtn = new QPushButton("管理课程");
+    manageCourseBtn->setStyleSheet("QPushButton { background-color: #8b85ff; color: white; border: none; padding: 6px 14px; border-radius: 6px; }");
+    connect(manageCourseBtn, &QPushButton::clicked, this, &HomePage::onViewAllCourses);
+    courseLayout->addWidget(manageCourseBtn, 0, Qt::AlignRight);
+
+    recentRow->addWidget(achievementCard);
+    recentRow->addWidget(courseCard);
+    mainLayout->addLayout(recentRow);
 
     // 底部按钮
     QHBoxLayout *btnLayout = new QHBoxLayout;
     btnLayout->addStretch();
     QPushButton *addCourseBtn = new QPushButton("添加课程");
     QPushButton *exportResumeBtn = new QPushButton("导出简历");
+    QString btnStyle = "QPushButton { background-color: #8b85ff; color: white; border: none; padding: 6px 14px; border-radius: 6px; }";
+    addCourseBtn->setStyleSheet(btnStyle);
+    exportResumeBtn->setStyleSheet(btnStyle);
     connect(addCourseBtn, &QPushButton::clicked, this, &HomePage::onAddCourse);
     connect(exportResumeBtn, &QPushButton::clicked, this, &HomePage::onExportResume);
     btnLayout->addWidget(addCourseBtn);
     btnLayout->addWidget(exportResumeBtn);
     mainLayout->addLayout(btnLayout);
+
+    scrollArea->setWidget(contentWidget);
+    QVBoxLayout *outerLayout = new QVBoxLayout(this);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+    outerLayout->addWidget(scrollArea);
 }
 
 void HomePage::loadUserInfo()
@@ -199,29 +264,99 @@ void HomePage::loadProgress()
 
 void HomePage::loadTodos()
 {
+    // 清空原有待办
     QLayoutItem *child;
-    while ((child = m_todoLayout->takeAt(0)) != nullptr) delete child;
-    auto addTodo = [this](const QString &text) {
-        QCheckBox *cb = new QCheckBox(text);
+    while ((child = m_todoLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) delete child->widget();
+        delete child;
+    }
+
+    auto& dm = DataManager::instance();
+    bool hasTodo = false;
+
+    // 1. 毕业要求缺口（已启用，需要 DataManager::getRequirements 实现）
+    QList<Requirement> reqs = dm.getRequirements();
+    for (const Requirement& req : reqs) {
+        double shortage = req.requiredCredits - req.earnedCredits;
+        if (shortage > 0.01) {
+            QCheckBox *cb = new QCheckBox(QString("%1 尚缺 %2 学分").arg(req.category).arg(shortage, 0, 'f', 1));
+            m_todoLayout->addWidget(cb);
+            hasTodo = true;
+        }
+    }
+
+    // 2. 未录入成绩的课程
+    QList<Course> courses = dm.getAllCourses();
+    int noGradeCount = 0;
+    for (const Course& c : courses) {
+        if (c.score <= 0.01 && c.status != "未修") noGradeCount++;
+    }
+    if (noGradeCount > 0) {
+        QCheckBox *cb = new QCheckBox(QString("您有 %1 门课程尚未录入成绩").arg(noGradeCount));
         m_todoLayout->addWidget(cb);
-    };
-    addTodo("学科基础选修尚缺 8 学分，请选修课程");
-    addTodo("您有 2 门课程尚未添加成绩");
-    addTodo("距离挑战杯报名截止还有 3 天");
+        hasTodo = true;
+    }
+
+    // 3. 如果没有任何待办，显示鼓励信息
+    if (!hasTodo) {
+        QLabel *label = new QLabel("🎉 太棒了！当前没有待办事项。");
+        label->setStyleSheet("color: #6c63ff;");
+        m_todoLayout->addWidget(label);
+    }
 }
 
 void HomePage::loadRecent()
 {
     QLayoutItem *child;
-    while ((child = m_recentLayout->takeAt(0)) != nullptr) delete child;
-    QLabel *achLabel = new QLabel("🏆 最近成就：挑战杯（省级）2026-06-03");
-    QLabel *courseLabel = new QLabel("📚 最近课程：数据结构（2024-2025-2）");
-    m_recentLayout->addWidget(achLabel);
-    m_recentLayout->addWidget(courseLabel);
-    m_recentLayout->addStretch();
+    while ((child = m_achievementLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) delete child->widget();
+        delete child;
+    }
+    while ((child = m_courseLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) delete child->widget();
+        delete child;
+    }
+
+    // 成就列表
+    QList<Achievement> achievements = DataManager::instance().getAllAchievements();
+    std::sort(achievements.begin(), achievements.end(),
+              [](const Achievement& a, const Achievement& b) { return a.obtainDate > b.obtainDate; });
+    int achCount = std::min(5, achievements.size());
+    for (int i = 0; i < achCount; ++i) {
+        const Achievement& ach = achievements[i];
+        QString display = QString("%1  %2").arg(ach.name).arg(ach.obtainDate.toString("yyyy-MM-dd"));
+        if (!ach.level.isEmpty()) {
+            display = QString("%1（%2）  %3").arg(ach.name).arg(ach.level).arg(ach.obtainDate.toString("yyyy-MM-dd"));
+        }
+        QLabel *label = new QLabel(display);
+        label->setWordWrap(true);
+        m_achievementLayout->addWidget(label);
+    }
+    if (achievements.isEmpty()) {
+        QLabel *label = new QLabel("暂无成就记录");
+        m_achievementLayout->addWidget(label);
+    }
+
+    // 课程列表
+    QList<Course> courses = DataManager::instance().getAllCourses();
+    std::sort(courses.begin(), courses.end(),
+              [](const Course& a, const Course& b) { return a.id > b.id; });
+    int courseCount = std::min(5, courses.size());
+    for (int i = 0; i < courseCount; ++i) {
+        const Course& c = courses[i];
+        QLabel *label = new QLabel(QString("📚 %1（%2）").arg(c.name).arg(c.semester));
+        label->setWordWrap(true);
+        m_courseLayout->addWidget(label);
+    }
+    if (courses.isEmpty()) {
+        QLabel *label = new QLabel("暂无课程");
+        m_courseLayout->addWidget(label);
+    }
 }
 
-void HomePage::onEditProfile()   { emit switchToTab(1); }
-void HomePage::onAddCourse()     { emit switchToTab(2); }
-void HomePage::onExportResume()  { emit switchToTab(3); }
-void HomePage::onViewAllProgress() { emit switchToTab(4); }
+void HomePage::onEditProfile()          { emit switchToTab(1); }
+void HomePage::onAddCourse()            { emit switchToTab(2); }
+void HomePage::onExportResume()         { emit switchToTab(3); }
+void HomePage::onViewAllProgress()      { emit switchToTab(4); }
+void HomePage::onViewAllAchievements()  { emit switchToTab(3); }
+void HomePage::onViewAllCourses()       { emit switchToTab(2); }

@@ -4,6 +4,9 @@
 #include <QDir>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 DataManager::DataManager(QObject *parent) : QObject(parent)
 {
@@ -40,6 +43,7 @@ bool DataManager::initDatabase()
 {
     QSqlQuery query;
 
+    // 课程表
     QString createCourses = R"(
         CREATE TABLE IF NOT EXISTS courses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,6 +62,7 @@ bool DataManager::initDatabase()
         return false;
     }
 
+    // 用户资料表
     QString createProfile = R"(
         CREATE TABLE IF NOT EXISTS user_profile (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -79,9 +84,25 @@ bool DataManager::initDatabase()
         query.exec("INSERT INTO user_profile (id) VALUES (1)");
     }
 
+    // 成就表（与 ExpAchieveWidget 中使用的表结构一致）
+    QString createAchievements = R"(
+        CREATE TABLE IF NOT EXISTS achievement (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            level TEXT,
+            date TEXT,
+            tags TEXT,
+            filePath TEXT
+        )
+    )";
+    if (!query.exec(createAchievements)) {
+        qWarning() << "Failed to create achievement:" << query.lastError().text();
+    }
+
     return true;
 }
 
+// ========== 课程操作 ==========
 bool DataManager::updateCourse(int id, const Course& course)
 {
     QSqlQuery query;
@@ -219,6 +240,7 @@ QList<Course> DataManager::getCoursesByFilter(const QString& keyword,
     return courses;
 }
 
+// ========== 用户资料操作 ==========
 UserProfile DataManager::getUserProfile() const
 {
     UserProfile profile;
@@ -255,4 +277,116 @@ bool DataManager::saveUserProfile(const UserProfile& profile)
     }
     emit dataChanged();
     return true;
+}
+
+// ========== 成就操作 ==========
+bool DataManager::addAchievement(const Achievement& ach)
+{
+    QSqlQuery query;
+    query.prepare("INSERT INTO achievement (name, level, date, tags, filePath) VALUES (?, ?, ?, ?, ?)");
+    query.addBindValue(ach.name);
+    query.addBindValue(ach.level);
+    query.addBindValue(ach.obtainDate.toString(Qt::ISODate));
+    query.addBindValue(ach.tags.join(","));
+    query.addBindValue(ach.materialPath);
+    if (!query.exec()) {
+        qWarning() << "addAchievement failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
+bool DataManager::updateAchievement(int id, const Achievement& ach)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE achievement SET name=?, level=?, date=?, tags=?, filePath=? WHERE id=?");
+    query.addBindValue(ach.name);
+    query.addBindValue(ach.level);
+    query.addBindValue(ach.obtainDate.toString(Qt::ISODate));
+    query.addBindValue(ach.tags.join(","));
+    query.addBindValue(ach.materialPath);
+    query.addBindValue(id);
+    if (!query.exec()) {
+        qWarning() << "updateAchievement failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
+bool DataManager::deleteAchievement(int id)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM achievement WHERE id=?");
+    query.addBindValue(id);
+    if (!query.exec()) {
+        qWarning() << "deleteAchievement failed:" << query.lastError().text();
+        return false;
+    }
+    emit dataChanged();
+    return true;
+}
+
+QList<Achievement> DataManager::getAllAchievements() const
+{
+    QList<Achievement> achievements;
+    QSqlQuery query("SELECT id, name, level, date, tags, filePath FROM achievement ORDER BY date DESC");
+    while (query.next()) {
+        Achievement ach;
+        ach.id = query.value(0).toInt();
+        ach.name = query.value(1).toString();
+        ach.level = query.value(2).toString();
+        ach.obtainDate = QDate::fromString(query.value(3).toString(), Qt::ISODate);
+        QString tagsStr = query.value(4).toString();
+        if (!tagsStr.isEmpty()) {
+            ach.tags = tagsStr.split(",", QString::SkipEmptyParts);
+        }
+        ach.materialPath = query.value(5).toString();
+        achievements.append(ach);
+    }
+    return achievements;
+}
+
+// ========== 毕业要求统计 ==========
+QList<Requirement> DataManager::getRequirements() const
+{
+    QList<Requirement> requirements;
+
+    // 1. 从资源文件加载毕业要求总学分
+    QFile file(":/data/graduation_reqs.json");
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "Failed to open graduation_reqs.json";
+        return requirements;
+    }
+    QByteArray data = file.readAll();
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (doc.isNull()) {
+        qWarning() << "Invalid JSON in graduation_reqs.json";
+        return requirements;
+    }
+    QJsonObject root = doc.object();
+    for (const QString& key : root.keys()) {
+        Requirement req;
+        req.category = key;
+        req.requiredCredits = root[key].toDouble();
+        req.earnedCredits = 0.0;
+        requirements.append(req);
+    }
+    file.close();
+
+    // 2. 获取所有课程，累加已修学分（成绩≥60）
+    QList<Course> courses = getAllCourses();
+    for (const Course& c : courses) {
+        if (c.status == "已修" && c.score >= 60) {
+            for (Requirement& req : requirements) {
+                if (req.category == c.courseType) {
+                    req.earnedCredits += c.credit;
+                    break;
+                }
+            }
+        }
+    }
+
+    return requirements;
 }

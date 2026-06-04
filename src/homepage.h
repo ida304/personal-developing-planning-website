@@ -9,7 +9,7 @@
 #include <QGroupBox>
 #include <QProgressBar>
 #include <QCheckBox>
-#include "core/DataManager.h"
+#include <QScrollArea>
 
 class HomePage : public QWidget
 {
@@ -18,18 +18,21 @@ public:
     explicit HomePage(QWidget *parent = nullptr);
 
 signals:
-    void switchToTab(int index);  // 切换到其他页面
+    void switchToTab(int index);
 
 private slots:
     void onEditProfile();
     void onAddCourse();
     void onExportResume();
     void onViewAllProgress();
-    void refreshUserInfo();
+    void onViewAllAchievements();
+    void onViewAllCourses();
+    void refreshAll();
+    void refreshUserInfo();          // 队友新增：单独刷新个人信息
 
 private:
     void setupUI();
-    void loadUserInfo();      // 从 DataManager 读取
+    void loadUserInfo();             // 从 DataManager 读取
     void loadAcademicStats();
     void loadProgress();
     void loadTodos();
@@ -39,7 +42,8 @@ private:
     QLabel *m_gpaLabel, *m_creditsLabel, *m_passRateLabel;
     QVBoxLayout *m_progressLayout;
     QVBoxLayout *m_todoLayout;
-    QHBoxLayout *m_recentLayout;
+    QVBoxLayout *m_achievementLayout;
+    QVBoxLayout *m_courseLayout;
 };
 
 #endif // HOMEPAGE_H

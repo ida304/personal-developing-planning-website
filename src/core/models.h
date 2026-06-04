@@ -27,4 +27,20 @@ struct UserProfile {
     QString photoPath;
 };
 
+struct Achievement {
+    int id = -1;
+    QString name;
+    QString level;          // 国家级/省级/校级等
+    QDate obtainDate;       // 获得时间
+    QStringList tags;       // 标签列表
+    QString materialPath;   // 材料路径
+};
+
+// 毕业要求项
+struct Requirement {
+    QString category;      // 如 "学科基础必修"
+    double requiredCredits; // 要求总学分
+    double earnedCredits;   // 已修学分
+};
+
 #endif // MODELS_H
