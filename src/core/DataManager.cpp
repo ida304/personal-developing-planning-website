@@ -340,7 +340,7 @@ QList<Achievement> DataManager::getAllAchievements() const
         ach.obtainDate = QDate::fromString(query.value(3).toString(), Qt::ISODate);
         QString tagsStr = query.value(4).toString();
         if (!tagsStr.isEmpty()) {
-            ach.tags = tagsStr.split(",", QString::SkipEmptyParts);
+            ach.tags = tagsStr.split(",", Qt::SkipEmptyParts);
         }
         ach.materialPath = query.value(5).toString();
         achievements.append(ach);

@@ -1,5 +1,5 @@
 #include "MainWindow.h"
-#include "HomePage.h"
+#include "homepage.h"
 #include "profile/ProfileWidget.h"
 #include "course/CourseWidget.h"
 #include "experience_achievement/ExpAchieveWidget.h"
