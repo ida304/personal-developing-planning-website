@@ -19,7 +19,7 @@
 #include <QJsonArray>
 
 ProgressWidget::ProgressWidget(QWidget *parent)
-    : QWidget(parent)
+    : QWidget(parent), isManualOverride(false)
 {
     categories << "学科基础必修" << "学科基础选修" << "专业方向必修"
                << "核心通识" << "选修通识" << "通修" << "实验课" << "暑课";
@@ -27,6 +27,7 @@ ProgressWidget::ProgressWidget(QWidget *parent)
     setupUI();
     categoryMapping = loadCategoryMapping();
 
+    // 【核心关联】监听 DataManager 的全局数据变更信号（课程增删改、个人信息修改均会触发）
     connect(&DataManager::instance(), &DataManager::dataChanged,
             this, &ProgressWidget::refreshData);
 
@@ -39,11 +40,8 @@ ProgressWidget::~ProgressWidget()
 
 void ProgressWidget::setupUI()
 {
-    // 白色圆角容器
     QWidget *container = new QWidget(this);
-    container->setStyleSheet(
-        "QWidget { background-color: white; border-radius: 16px; border: 1px solid #eef0f7; }"
-    );
+    container->setStyleSheet("QWidget { background-color: white; border-radius: 16px; border: 1px solid #eef0f7; }");
     QVBoxLayout *containerLayout = new QVBoxLayout(container);
     containerLayout->setContentsMargins(20, 20, 20, 20);
     containerLayout->setSpacing(20);
@@ -58,12 +56,10 @@ void ProgressWidget::setupUI()
     titleLabel->setFont(titleFont);
     titleLabel->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(titleLabel, 0, 0, 1, 4, Qt::AlignCenter);
-
     mainLayout->addItem(new QSpacerItem(20, 20), 1, 0);
 
     int row = 2;
     int col = 0;
-
     for (const QString &category : categories) {
         QLabel *categoryLabel = new QLabel(category, this);
         categoryLabel->setMinimumWidth(120);
@@ -98,12 +94,10 @@ void ProgressWidget::setupUI()
             mainLayout->addItem(new QSpacerItem(20, 10), row - 1, 0);
         }
     }
-
     mainLayout->setRowStretch(row + 1, 1);
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     buttonLayout->addStretch();
-
     exportButton = new QPushButton("导出进度报告", this);
     exportButton->setMinimumWidth(150);
     exportButton->setMinimumHeight(35);
@@ -116,7 +110,6 @@ void ProgressWidget::setupUI()
     buttonLayout->addStretch();
 
     mainLayout->addLayout(buttonLayout, row + 2, 0, 1, 4);
-
     containerLayout->addLayout(mainLayout);
 
     QVBoxLayout *outerLayout = new QVBoxLayout(this);
@@ -144,17 +137,13 @@ QMap<QString, QStringList> ProgressWidget::loadCategoryMapping()
     return mapping;
 }
 
-bool ProgressWidget::loadGraduationReqsWithFallback()
+bool ProgressWidget::loadGraduationReqsWithFallback(const QString& major, const QString& grade)
 {
     QFile reqFile(":/data/graduation_reqs.json");
     if (reqFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QJsonDocument doc = QJsonDocument::fromJson(reqFile.readAll());
         QJsonObject obj = doc.object();
         reqFile.close();
-
-        UserProfile profile = DataManager::instance().getUserProfile();
-        QString major = profile.major;
-        QString grade = profile.grade;
 
         if (obj.contains(major)) {
             QJsonObject majorObj = obj[major].toObject();
@@ -168,10 +157,13 @@ bool ProgressWidget::loadGraduationReqsWithFallback()
                         requiredCredits[cat] = 0.0;
                     }
                 }
+                isManualOverride = false; // 成功从配置文件加载，取消手动标记
                 return true;
             }
         }
     }
+
+    // 如果未找到预设配置，触发降级策略
     showManualCreditDialog();
     return false;
 }
@@ -209,28 +201,43 @@ void ProgressWidget::showManualCreditDialog()
         for (const QString &cat : categories) {
             requiredCredits[cat] = spinBoxes[cat]->value();
         }
+        isManualOverride = true; // 标记为手动录入，防止后续刷新再次弹窗
     } else {
+        requiredCredits.clear();
         for (const QString &cat : categories) {
             requiredCredits[cat] = 0.0;
         }
+        isManualOverride = true;
     }
 }
 
 QMap<QString, double> ProgressWidget::calculateEarnedCredits()
 {
     QMap<QString, double> earned;
-    for (const QString &cat : categories) earned[cat] = 0.0;
+    for (const QString &cat : categories) {
+        earned[cat] = 0.0;
+    }
 
+    // 【核心关联】实时从 DataManager 获取最新课程列表
     QList<Course> courses = DataManager::instance().getAllCourses();
     for (const Course &course : courses) {
-        if (course.status != "已修") continue;
+        // 严格遵循规范：只统计状态为“已修”的课程
+        if (course.status != "已修") {
+            continue;
+        }
+
+        // 严格遵循规范：使用 courseType 字段进行映射匹配
         if (categoryMapping.contains(course.courseType)) {
             QStringList targets = categoryMapping[course.courseType];
             for (const QString &target : targets) {
-                if (earned.contains(target)) earned[target] += course.credit;
+                if (earned.contains(target)) {
+                    earned[target] += course.credit;
+                }
             }
         } else {
-            if (earned.contains(course.courseType)) earned[course.courseType] += course.credit;
+            if (earned.contains(course.courseType)) {
+                earned[course.courseType] += course.credit;
+            }
         }
     }
     return earned;
@@ -239,6 +246,8 @@ QMap<QString, double> ProgressWidget::calculateEarnedCredits()
 void ProgressWidget::refreshData()
 {
     UserProfile profile = DataManager::instance().getUserProfile();
+
+    // 1. 如果专业或年级为空，清空显示并提示（仅首次提示，避免打扰）
     if (profile.major.isEmpty() || profile.grade.isEmpty()) {
         for (const QString &category : categories) {
             if (progressBars.contains(category)) {
@@ -248,22 +257,36 @@ void ProgressWidget::refreshData()
             if (creditLabels.contains(category)) creditLabels[category]->setText("请先填写个人资料");
             if (gapLabels.contains(category)) gapLabels[category]->setText("");
         }
-        static bool hasShownHint = false;
-        if (!hasShownHint) {
-            QMessageBox::information(this, "提示", "检测到您尚未填写个人资料（专业、年级）。\n\n请先前往【个人资料】标签页填写您的专业和年级信息，系统将自动加载对应的培养方案。");
-            hasShownHint = true;
+
+        if (lastMajor.isEmpty()) {
+            QMessageBox::information(this, "提示", "检测到您尚未填写个人资料（专业、年级）。\n请先前往【个人资料】标签页填写，系统将自动加载对应的培养方案。");
         }
+        lastMajor = "";
+        lastGrade = "";
         return;
     }
 
-    loadGraduationReqsWithFallback();
-    categoryMapping = loadCategoryMapping();
+    // 2. 【核心关联】检测个人主页的专业/年级是否发生变化
+    // 只有当专业、年级变化，或者尚未加载过配置时，才重新读取 JSON
+    if (profile.major != lastMajor || profile.grade != lastGrade || requiredCredits.isEmpty()) {
+        loadGraduationReqsWithFallback(profile.major, profile.grade);
+        lastMajor = profile.major;   // 更新记录
+        lastGrade = profile.grade;   // 更新记录
+    }
+
+    // 3. 确保映射表已加载（通常只需加载一次）
+    if (categoryMapping.isEmpty()) {
+        categoryMapping = loadCategoryMapping();
+    }
+
+    // 4. 重新计算并更新界面（课程模块的增删改也会走到这里，实现学分实时增减）
     updateProgressDisplay();
 }
 
 void ProgressWidget::updateProgressDisplay()
 {
     QMap<QString, double> earnedCredits = calculateEarnedCredits();
+
     for (const QString &category : categories) {
         double required = requiredCredits.value(category, 0.0);
         double earned = earnedCredits.value(category, 0.0);
@@ -301,57 +324,53 @@ void ProgressWidget::updateProgressDisplay()
 void ProgressWidget::generateHTMLReport()
 {
     UserProfile profile = DataManager::instance().getUserProfile();
-
     QString htmlContent = R"(
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <title>培养进度报告</title>
-    <style>
-        body { font-family: 'Microsoft YaHei', Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }
-        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #333; border-bottom: 3px solid #4CAF50; padding-bottom: 15px; }
-        .info { background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 25px; }
-        .info p { margin: 5px 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #4CAF50; color: white; }
-        tr:hover { background-color: #f5f5f5; }
-        .progress-bar { width: 100%; height: 25px; background-color: #e0e0e0; border-radius: 3px; overflow: hidden; }
-        .progress-fill { height: 100%; background-color: #4CAF50; transition: width 0.3s; }
-        .warning { background-color: #ffebee !important; }
-        .success { color: #4CAF50; font-weight: bold; }
-        .gap { color: #f44336; font-weight: bold; }
-        .summary { margin-top: 30px; padding: 20px; background: #e8f5e9; border-radius: 5px; }
-        @media print { body { margin: 20px; } .container { box-shadow: none; } }
-    </style>
+<meta charset="UTF-8">
+<title>培养进度报告</title>
+<style>
+body { font-family: 'Microsoft YaHei', Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }
+.container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+h1 { text-align: center; color: #333; border-bottom: 3px solid #4CAF50; padding-bottom: 15px; }
+.info { background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 25px; }
+.info p { margin: 5px 0; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+th { background-color: #4CAF50; color: white; }
+tr:hover { background-color: #f5f5f5; }
+.progress-bar { width: 100%; height: 25px; background-color: #e0e0e0; border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background-color: #4CAF50; transition: width 0.3s; }
+.warning { background-color: #ffebee !important; }
+.success { color: #4CAF50; font-weight: bold; }
+.gap { color: #f44336; font-weight: bold; }
+.summary { margin-top: 30px; padding: 20px; background: #e8f5e9; border-radius: 5px; }
+@media print { body { margin: 20px; } .container { box-shadow: none; } }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>📊 个人培养进度报告</h1>
-        <div class="info">
-            <p><strong>姓名：</strong>)" + profile.name + R"(</p>
-            <p><strong>专业：</strong>)" + profile.major + R"(</p>
-            <p><strong>年级：</strong>)" + profile.grade + R"(</p>
-            <p><strong>生成时间：</strong>)" + QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss") + R"(</p>
-        </div>
-
-        <h2>学分完成情况</h2>
-         <table>
-             <tr>
-                <th>课程类别</th>
-                <th>应修学分</th>
-                <th>已修学分</th>
-                <th>缺口</th>
-                <th>完成率</th>
-                <th>进度条</th>
-             </tr>
-    )";
-
+<div class="container">
+<h1>📊 个人培养进度报告</h1>
+<div class="info">
+<p><strong>姓名：</strong>)" + profile.name + R"(</p>
+<p><strong>专业：</strong>)" + profile.major + R"(</p>
+<p><strong>年级：</strong>)" + profile.grade + R"(</p>
+<p><strong>生成时间：</strong>)" + QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss") + R"(</p>
+</div>
+<h2>学分完成情况</h2>
+<table>
+<tr>
+<th>课程类别</th>
+<th>应修学分</th>
+<th>已修学分</th>
+<th>缺口</th>
+<th>完成率</th>
+<th>进度条</th>
+</tr>
+)";
     double totalRequired = 0, totalEarned = 0;
     int completedCount = 0;
-
     for (const QString &category : categories) {
         ProgressSummary summary = progressSummary[category];
         totalRequired += summary.required;
@@ -360,50 +379,48 @@ void ProgressWidget::generateHTMLReport()
 
         QString rowClass = (summary.gap > 0) ? "warning" : "";
         QString gapText = (summary.gap > 0) ?
-            QString("<span class='gap'>%1</span>").arg(summary.gap, 0, 'f', 1) :
-            "<span class='success'>✓</span>";
+                          QString("<span class='gap'>%1</span>").arg(summary.gap, 0, 'f', 1) :
+                          "<span class='success'>✓</span>";
 
         htmlContent += QString(R"(
-            <tr class="%1">
-                 <td><strong>%2</strong></td>
-                 <td>%3</td><td>%4</td><td>%5</td><td>%6%</td>
-                 <td><div class="progress-bar"><div class="progress-fill" style="width: %7%%; background-color: %8;"></div></div></td>
-             </tr>
-        )").arg(rowClass)
-         .arg(category)
-         .arg(summary.required, 0, 'f', 1)
-         .arg(summary.earned, 0, 'f', 1)
-         .arg(gapText)
-         .arg(summary.completionRate, 0, 'f', 1)
-         .arg(summary.completionRate, 0, 'f', 1)
-         .arg(summary.gap > 0 ? "#f44336" : "#4CAF50");
+<tr class="%1">
+<td><strong>%2</strong></td>
+<td>%3</td><td>%4</td><td>%5</td><td>%6%</td>
+<td><div class="progress-bar"><div class="progress-fill" style="width: %7%%; background-color: %8;"></div></div></td>
+</tr>
+)").arg(rowClass)
+        .arg(category)
+        .arg(summary.required, 0, 'f', 1)
+        .arg(summary.earned, 0, 'f', 1)
+        .arg(gapText)
+        .arg(summary.completionRate, 0, 'f', 1)
+        .arg(summary.completionRate, 0, 'f', 1)
+        .arg(summary.gap > 0 ? "#f44336" : "#4CAF50");
     }
 
     double overallRate = (totalRequired > 0) ? (totalEarned / totalRequired) * 100.0 : 0.0;
     htmlContent += QString(R"(
-            <tr style="background-color: #e3f2fd; font-weight: bold;">
-                 <td>总计</td><td>%1</td><td>%2</td><td>%3</td><td>%4%</td>
-                 <td><div class="progress-bar"><div class="progress-fill" style="width: %5%%;"></div></div></td>
-             </tr>
-         </table>
-
-        <div class="summary">
-            <h3>📈 总体进度</h3>
-            <p><strong>已完成类别：</strong>%6 / %7</p>
-            <p><strong>总完成率：</strong>%4%%</p>
-            <p><strong>总学分进度：</strong>%2 / %1</p>
-        </div>
-
-        <div style="margin-top: 30px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 3px;">
-            <h4>💡 建议</h4>
-            <ul>
-    )").arg(totalRequired, 0, 'f', 1)
-     .arg(totalEarned, 0, 'f', 1)
-     .arg(qMax(0.0, totalRequired - totalEarned), 0, 'f', 1)
-     .arg(overallRate, 0, 'f', 1)
-     .arg(overallRate, 0, 'f', 1)
-     .arg(completedCount)
-     .arg(categories.size());
+<tr style="background-color: #e3f2fd; font-weight: bold;">
+<td>总计</td><td>%1</td><td>%2</td><td>%3</td><td>%4%</td>
+<td><div class="progress-bar"><div class="progress-fill" style="width: %5%%;"></div></div></td>
+</tr>
+</table>
+<div class="summary">
+<h3>📈 总体进度</h3>
+<p><strong>已完成类别：</strong>%6 / %7</p>
+<p><strong>总完成率：</strong>%4%%</p>
+<p><strong>总学分进度：</strong>%2 / %1</p>
+</div>
+<div style="margin-top: 30px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 3px;">
+<h4>💡 建议</h4>
+<ul>
+)").arg(totalRequired, 0, 'f', 1)
+    .arg(totalEarned, 0, 'f', 1)
+    .arg(qMax(0.0, totalRequired - totalEarned), 0, 'f', 1)
+    .arg(overallRate, 0, 'f', 1)
+    .arg(overallRate, 0, 'f', 1)
+    .arg(completedCount)
+    .arg(categories.size());
 
     bool hasGap = false;
     for (const QString &category : categories) {
@@ -414,16 +431,17 @@ void ProgressWidget::generateHTMLReport()
         }
     }
     if (!hasGap) htmlContent += "<li>🎉 恭喜！所有类别学分要求均已满足！</li>";
+
     htmlContent += R"(
-            </ul>
-        </div>
-        <div style="margin-top: 30px; text-align: center; color: #999; font-size: 12px;">
-            <p>提示：使用 Ctrl+P 可打印或保存为PDF</p>
-        </div>
-    </div>
+</ul>
+</div>
+<div style="margin-top: 30px; text-align: center; color: #999; font-size: 12px;">
+<p>提示：使用 Ctrl+P 可打印或保存为PDF</p>
+</div>
+</div>
 </body>
 </html>
-    )";
+)";
 
     QString fileName = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) +
                        "/培养进度报告_" + QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss") + ".html";
@@ -431,7 +449,7 @@ void ProgressWidget::generateHTMLReport()
     if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         file.write(htmlContent.toUtf8());
         file.close();
-        QMessageBox::information(this, "导出成功", QString("进度报告已生成！\n\n文件位置：%1\n\n系统将自动打开报告，您可以使用Ctrl+P打印或保存为PDF。").arg(fileName));
+        QMessageBox::information(this, "导出成功", QString("进度报告已生成！\n文件位置：%1\n系统将自动打开报告，您可以使用Ctrl+P打印或保存为PDF。").arg(fileName));
         QDesktopServices::openUrl(QUrl::fromLocalFile(fileName));
     } else {
         QMessageBox::warning(this, "导出失败", "无法保存报告文件，请检查磁盘空间或权限。");
