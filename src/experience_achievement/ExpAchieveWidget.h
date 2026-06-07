@@ -7,7 +7,17 @@
 #include <QDateEdit>
 #include <QPushButton>
 #include <QTextEdit>
-#include "../core/models.h"
+#include <QTabWidget>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QFormLayout>
+#include <QHeaderView>
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QFileDialog>
+#include <QDesktopServices>
+#include <QUrl>
+#include "../core/DataManager.h"
 
 class ExpAchieveWidget : public QWidget
 {
@@ -18,19 +28,18 @@ public:
 private slots:
     void addExperienceClicked();
     void updateExperienceClicked();
-    void deleteExperienceClicked(int expId);
+    void deleteExperienceClicked();
     void experienceCellClicked(int row);
     void openExpFileClicked();
 
     void addAchievementClicked();
     void updateAchievementClicked();
-    void deleteAchievementClicked(int achId);
+    void deleteAchievementClicked();
     void achievementCellClicked(int row);
     void openAchFileClicked();
 
 private:
     void createTablesIfNotExists();
-
     void setupUI();
     void refreshExperienceTable();
     void refreshAchievementTable();
