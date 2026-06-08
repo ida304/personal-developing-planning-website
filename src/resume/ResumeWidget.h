@@ -2,7 +2,6 @@
 #define RESUMEWIDGET_H
 
 #include <QWidget>
-<<<<<<< HEAD
 #include <QStackedWidget>
 #include <QTextEdit>
 #include <QTextBrowser>
@@ -12,20 +11,11 @@
 #include <QFrame>
 #include <QLabel>
 #include <QSqlDatabase>
-=======
-#include <QVBoxLayout>
-#include <QTextEdit>
-#include <QComboBox>
-
-// 前向声明
-class DataManager;
->>>>>>> origin/main
 
 class ResumeWidget : public QWidget
 {
     Q_OBJECT
 public:
-<<<<<<< HEAD
     explicit ResumeWidget(QWidget *parent = nullptr);
     ~ResumeWidget() override = default;
 
@@ -72,24 +62,6 @@ private:
     QPushButton *m_previewButton = nullptr;
     QPushButton *m_backButton = nullptr;
     QPushButton *m_exportButton = nullptr;
-=======
-    // 单参数构造函数
-    explicit ResumeWidget(QWidget *parent = nullptr);
-    ~ResumeWidget() override;
-
-    void setDataManager(DataManager *manager);
-
-private slots:
-    void onTemplateChanged(int index);
-
-private:
-    void initUI();
-
-    QVBoxLayout *m_mainLayout = nullptr;
-    QComboBox *m_templateSelector = nullptr;
-    QTextEdit *m_editor = nullptr;
-    DataManager *m_dataManager = nullptr;
->>>>>>> origin/main
 };
 
 #endif // RESUMEWIDGET_H

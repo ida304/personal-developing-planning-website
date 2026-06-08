@@ -157,7 +157,7 @@ void ExpAchieveWidget::addExperienceClicked()
 
     refreshExperienceTable();
     clearExperienceForm();
-    DataManager::instance().onDataChanged();
+    DataManager::instance().notifyDataChanged();
 }
 
 void ExpAchieveWidget::updateExperienceClicked()
@@ -178,7 +178,7 @@ void ExpAchieveWidget::updateExperienceClicked()
 
     refreshExperienceTable();
     clearExperienceForm();
-    DataManager::instance().onDataChanged();
+    DataManager::instance().notifyDataChanged();
 }
 
 void ExpAchieveWidget::deleteExperienceClicked()
@@ -190,7 +190,7 @@ void ExpAchieveWidget::deleteExperienceClicked()
     q.exec();
     refreshExperienceTable();
     clearExperienceForm();
-    DataManager::instance().onDataChanged();
+    DataManager::instance().notifyDataChanged();
 }
 
 void ExpAchieveWidget::experienceCellClicked(int row)
@@ -228,7 +228,7 @@ void ExpAchieveWidget::addAchievementClicked()
 
     refreshAchievementTable();
     clearAchievementForm();
-    DataManager::instance().onDataChanged();
+    DataManager::instance().notifyDataChanged();
 }
 
 void ExpAchieveWidget::updateAchievementClicked()
@@ -246,7 +246,7 @@ void ExpAchieveWidget::updateAchievementClicked()
 
     refreshAchievementTable();
     clearAchievementForm();
-    DataManager::instance().onDataChanged();
+    DataManager::instance().notifyDataChanged();
 }
 
 void ExpAchieveWidget::deleteAchievementClicked()
@@ -258,7 +258,7 @@ void ExpAchieveWidget::deleteAchievementClicked()
     q.exec();
     refreshAchievementTable();
     clearAchievementForm();
-    DataManager::instance().onDataChanged();
+    DataManager::instance().notifyDataChanged();
 }
 
 void ExpAchieveWidget::achievementCellClicked(int row)

@@ -181,7 +181,7 @@ QList<Course> DataManager::getAllCourses() const
 QList<Course> DataManager::searchCourses(const QString& keyword, const QString& field) const
 {
     QList<Course> result;
-    QString sql = "SELECT id, course_code, name, semester, credit, score, course_type, tags FROM courses WHERE ";
+    QString sql = "SELECT id, course_code, name, semester, credit, score, course_type, tags, status FROM courses WHERE ";
     if (field == "name") {
         sql += "name LIKE '%" + keyword + "%'";
     } else if (field == "code") {
@@ -200,6 +200,7 @@ QList<Course> DataManager::searchCourses(const QString& keyword, const QString& 
         c.score = query.value(5).toDouble();
         c.courseType = query.value(6).toString();
         c.tags = query.value(7).toString();
+        c.status = query.value(8).toString();
         result.append(c);
     }
     return result;
@@ -211,7 +212,7 @@ QList<Course> DataManager::getCoursesByFilter(const QString& keyword,
                                               const QString& tagKeyword) const
 {
     QList<Course> courses;
-    QString sql = "SELECT id, course_code, name, semester, credit, score, course_type, tags FROM courses WHERE 1=1";
+    QString sql = "SELECT id, course_code, name, semester, credit, score, course_type, tags, status FROM courses WHERE 1=1";
     if (!keyword.isEmpty()) {
         sql += " AND (name LIKE '%" + keyword + "%' OR course_code LIKE '%" + keyword + "%')";
     }
@@ -235,6 +236,7 @@ QList<Course> DataManager::getCoursesByFilter(const QString& keyword,
         c.score = query.value(5).toDouble();
         c.courseType = query.value(6).toString();
         c.tags = query.value(7).toString();
+        c.status = query.value(8).toString();
         courses.append(c);
     }
     return courses;
@@ -389,4 +391,51 @@ QList<Requirement> DataManager::getRequirements() const
     }
 
     return requirements;
+}
+
+// ========== 学业统计 ==========
+double DataManager::calculateGPA() const
+{
+    QList<Course> courses = getAllCourses();
+    double totalPoints = 0.0;
+    double totalCredits = 0.0;
+    for (const Course& c : courses) {
+        if (c.status != "已修") continue;   // 只统计已修课程
+        double point = 0.0;
+        if (c.score >= 90) point = 4.0;
+        else if (c.score >= 85) point = 3.7;
+        else if (c.score >= 82) point = 3.3;
+        else if (c.score >= 78) point = 3.0;
+        else if (c.score >= 75) point = 2.7;
+        else if (c.score >= 72) point = 2.3;
+        else if (c.score >= 68) point = 2.0;
+        else if (c.score >= 64) point = 1.5;
+        else if (c.score >= 60) point = 1.0;
+        // else point = 0.0（不及格）
+        totalPoints += point * c.credit;
+        totalCredits += c.credit;
+    }
+    return (totalCredits == 0) ? 0.0 : (totalPoints / totalCredits);
+}
+
+double DataManager::getTotalEarnedCredits() const
+{
+    QList<Course> courses = getAllCourses();
+    double earned = 0.0;
+    for (const Course& c : courses) {
+        if (c.status == "已修") {
+            earned += c.credit;
+        }
+    }
+    return earned;
+}
+
+double DataManager::getTotalRequiredCredits() const
+{
+    QList<Requirement> reqs = getRequirements();
+    double total = 0.0;
+    for (const Requirement& req : reqs) {
+        total += req.requiredCredits;
+    }
+    return total;
 }

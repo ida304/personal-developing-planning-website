@@ -12,8 +12,14 @@
 #include <QPushButton>
 #include <QHBoxLayout>
 #include <QApplication>
+#include <QMouseEvent>
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <windowsx.h>
+#endif
+
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_dragging(false)
 {
     setWindowFlags(Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -30,7 +36,7 @@ void MainWindow::setupUI()
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // 标题栏
+    // 标题栏 (保持不变)
     QWidget *titleBar = new QWidget;
     titleBar->setFixedHeight(60);
     titleBar->setStyleSheet("background-color: #ffffff; border-bottom: 1px solid #eef0f7; border-top-left-radius: 12px; border-top-right-radius: 12px;");
@@ -95,7 +101,6 @@ void MainWindow::setupUI()
 
     m_nav = new QListWidget;
     m_nav->setFixedWidth(260);
-    // 关键修改：上下边距设为 6px，产生间距并使第一个按钮下移
     QString navStyle = QString::fromUtf8(
         "QListWidget { background-color: #ffffff; border: none; outline: none; }"
         "QListWidget::item { background-color: #edeaff; padding: 14px 20px; border-radius: 12px; margin: 6px 12px; font-size: 13pt; color: #5a52d9; }"
@@ -134,3 +139,66 @@ void MainWindow::setupUI()
 
     setCentralWidget(central);
 }
+
+void MainWindow::mousePressEvent(QMouseEvent *event)
+{
+    // 标题栏拖拽移动
+    if (event->button() == Qt::LeftButton && event->pos().y() <= 60) {
+        m_dragging = true;
+        m_dragPos = event->globalPos() - frameGeometry().topLeft();
+        event->accept();
+    }
+}
+
+void MainWindow::mouseMoveEvent(QMouseEvent *event)
+{
+    if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+        move(event->globalPos() - m_dragPos);
+        event->accept();
+    }
+}
+
+void MainWindow::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        m_dragging = false;
+        event->accept();
+    }
+}
+
+#ifdef Q_OS_WIN
+bool MainWindow::nativeEvent(const QByteArray &eventType, void *message, long *result)
+{
+    MSG *msg = static_cast<MSG*>(message);
+    if (msg->message == WM_NCHITTEST) {
+        int xPos = GET_X_LPARAM(msg->lParam);
+        int yPos = GET_Y_LPARAM(msg->lParam);
+        QPoint globalPos(xPos, yPos);
+        QPoint localPos = mapFromGlobal(globalPos);
+        const int borderWidth = 8;  // 可调，控制触发缩放的边缘厚度
+
+        // 检测边缘
+        if (localPos.x() <= borderWidth) {
+            if (localPos.y() <= borderWidth) *result = HTTOPLEFT;
+            else if (localPos.y() >= height() - borderWidth) *result = HTBOTTOMLEFT;
+            else *result = HTLEFT;
+            return true;
+        }
+        else if (localPos.x() >= width() - borderWidth) {
+            if (localPos.y() <= borderWidth) *result = HTTOPRIGHT;
+            else if (localPos.y() >= height() - borderWidth) *result = HTBOTTOMRIGHT;
+            else *result = HTRIGHT;
+            return true;
+        }
+        else if (localPos.y() <= borderWidth) {
+            *result = HTTOP;
+            return true;
+        }
+        else if (localPos.y() >= height() - borderWidth) {
+            *result = HTBOTTOM;
+            return true;
+        }
+    }
+    return QMainWindow::nativeEvent(eventType, message, result);
+}
+#endif

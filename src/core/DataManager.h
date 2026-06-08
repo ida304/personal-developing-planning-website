@@ -26,6 +26,8 @@ public:
 
     UserProfile getUserProfile() const;
     bool saveUserProfile(const UserProfile& profile);
+    // 通知数据变化（供外部调用以触发刷新）
+    void notifyDataChanged() { emit dataChanged(); }
     // 成就管理
     bool addAchievement(const Achievement& ach);
     bool updateAchievement(int id, const Achievement& ach);
@@ -33,6 +35,10 @@ public:
     QList<Achievement> getAllAchievements() const;
     // DataManager.h 中
     QList<Requirement> getRequirements() const;
+    // 在 public 区域，成就管理函数后面添加
+    double calculateGPA() const;
+    double getTotalEarnedCredits() const;
+    double getTotalRequiredCredits() const;
 
 signals:
     void dataChanged();
