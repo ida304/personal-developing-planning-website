@@ -133,7 +133,7 @@ void CourseWidget::onAddClicked()
     course.courseType = courseType;
     course.tags = tags;
     course.semester = semester;
-    course.status = status;
+    course.status = m_statusCombo->currentText();
 
     if (DataManager::instance().addCourse(course)) {
         QMessageBox::information(this, "成功", "课程添加成功");
@@ -289,6 +289,9 @@ void CourseWidget::refreshTable(const QString& keyword, const QString& field)
             m_tableWidget->setColumnWidth(i, colWidths[i]);
         }
     }
+    // 让所有列自动适应内容宽度，且最后一列拉伸填充空白
+    m_tableWidget->resizeColumnsToContents();
+    m_tableWidget->horizontalHeader()->setStretchLastSection(true);
 }
 void CourseWidget::onEditClicked(int row)
 {

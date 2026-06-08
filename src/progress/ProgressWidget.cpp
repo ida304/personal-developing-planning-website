@@ -15,6 +15,7 @@
 #include <QFormLayout>
 #include <QDebug>
 #include <QJsonDocument>
+#include <QDebug>
 #include <QJsonObject>
 #include <QJsonArray>
 
@@ -218,15 +219,15 @@ QMap<QString, double> ProgressWidget::calculateEarnedCredits()
         earned[cat] = 0.0;
     }
 
-    // 【核心关联】实时从 DataManager 获取最新课程列表
+    // 获取最新课程列表
     QList<Course> courses = DataManager::instance().getAllCourses();
     for (const Course &course : courses) {
-        // 严格遵循规范：只统计状态为“已修”的课程
+        // 只统计状态为“已修”的课程
         if (course.status != "已修") {
             continue;
         }
 
-        // 严格遵循规范：使用 courseType 字段进行映射匹配
+        // 通过映射表将课程类型归类到毕业要求类别
         if (categoryMapping.contains(course.courseType)) {
             QStringList targets = categoryMapping[course.courseType];
             for (const QString &target : targets) {
