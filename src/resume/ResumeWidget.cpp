@@ -1,6 +1,6 @@
 #include "ResumeWidget.h"
-#include "../core/DataManager.h"
-#include "../core/models.h"
+#include "core/DataManager.h"
+#include "core/models.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -20,6 +20,8 @@ ResumeWidget::ResumeWidget(QWidget *parent)
 {
     setupUi();
     refreshData();
+    connect(&DataManager::instance(), &DataManager::dataChanged,
+            this, &ResumeWidget::refreshData);
 }
 
 void ResumeWidget::setupUi()
@@ -80,10 +82,11 @@ void ResumeWidget::setupUi()
         }
         QTextEdit#summaryEditor {
             min-height: 78px;
+            line-height: 1.6;
         }
         QTextEdit#resumeEditor {
             font-size: 15px;
-            line-height: 150%;
+            line-height: 1.6;
         }
         QTextBrowser#previewBrowser {
             background-color: #f6f3ff;
@@ -291,10 +294,12 @@ void ResumeWidget::refreshData()
     DataManager& dm = DataManager::instance();
     UserProfile profile = dm.getUserProfile();
 
+    // 同步个人资料到基本信息编辑框（实现联动）
     if (!profile.name.isEmpty()) m_nameEdit->setText(profile.name);
     if (!profile.school.isEmpty()) m_schoolEdit->setText(profile.school);
     if (!profile.major.isEmpty()) m_majorEdit->setText(profile.major);
 
+    // 刷新正文内容（课程、成就等）
     m_resumeEdit->setPlainText(buildResumePlainText());
 }
 
@@ -305,15 +310,10 @@ QString ResumeWidget::buildResumePlainText() const
     QList<Course> courses = dm.getAllCourses();
     QList<Achievement> achievements = dm.getAllAchievements();
 
-    QString school = m_schoolEdit && !m_schoolEdit->text().trimmed().isEmpty()
-            ? m_schoolEdit->text().trimmed() : profile.school;
-    QString major = m_majorEdit && !m_majorEdit->text().trimmed().isEmpty()
-            ? m_majorEdit->text().trimmed() : profile.major;
-
     QString text;
     text += "【教育背景】\n";
-    text += QString("学校：%1\n").arg(school.isEmpty() ? "待填写" : school);
-    text += QString("专业：%1\n").arg(major.isEmpty() ? "待填写" : major);
+    text += QString("学校：%1\n").arg(m_schoolEdit->text().trimmed().isEmpty() ? "待填写" : m_schoolEdit->text().trimmed());
+    text += QString("专业：%1\n").arg(m_majorEdit->text().trimmed().isEmpty() ? "待填写" : m_majorEdit->text().trimmed());
     if (!profile.education.isEmpty()) text += QString("学历：%1\n").arg(profile.education);
     if (!profile.grade.isEmpty()) text += QString("年级：%1\n").arg(profile.grade);
 
@@ -321,16 +321,12 @@ QString ResumeWidget::buildResumePlainText() const
     if (courses.isEmpty()) {
         text += "- 暂无课程数据，可在这里手动补充。\n";
     } else {
-        int count = 0;
         for (const Course& c : courses) {
-            if (count >= 10) break;
-            QString item = QString("- %1").arg(c.name.isEmpty() ? "课程名称待填写" : c.name);
-            QStringList details;
-            if (!c.courseType.isEmpty()) details << c.courseType;
-            if (c.score > 0) details << QString("成绩：%1").arg(c.score);
-            if (!details.isEmpty()) item += QString("（%1）").arg(details.join("，"));
-            text += item + "\n";
-            ++count;
+            if (c.status != "已修") continue;
+            text += QString("- %1（%2学分，成绩%3）\n")
+                    .arg(c.name.isEmpty() ? "课程名称待填写" : c.name)
+                    .arg(c.credit)
+                    .arg(c.score);
         }
     }
 
@@ -413,45 +409,9 @@ QString ResumeWidget::safeText(const QString& value, const QString& placeholder)
     return trimmed.isEmpty() ? placeholder.toHtmlEscaped() : trimmed.toHtmlEscaped();
 }
 
-QString ResumeWidget::buildBodyHtmlFromEditor() const
-{
-    QStringList lines = m_resumeEdit->toPlainText().replace("\r\n", "\n").split('\n');
-    QString html;
-    bool inList = false;
-
-    for (QString line : lines) {
-        line = line.trimmed();
-        if (line.isEmpty()) continue;
-
-        if (line.startsWith("【") && line.endsWith("】")) {
-            if (inList) {
-                html += "</ul>";
-                inList = false;
-            }
-            QString title = line.mid(1, line.length() - 2).toHtmlEscaped();
-            html += "<h2>" + title + "</h2>";
-        } else if (line.startsWith("-") || line.startsWith("•")) {
-            if (!inList) {
-                html += "<ul>";
-                inList = true;
-            }
-            QString item = line.mid(1).trimmed().toHtmlEscaped();
-            html += "<li>" + item + "</li>";
-        } else {
-            if (inList) {
-                html += "</ul>";
-                inList = false;
-            }
-            html += "<p>" + line.toHtmlEscaped() + "</p>";
-        }
-    }
-
-    if (inList) html += "</ul>";
-    return html;
-}
-
 QString ResumeWidget::buildResumeHtml() const
 {
+    // 基本信息
     QString school = safeText(m_schoolEdit->text(), "学校待填写");
     QString major = safeText(m_majorEdit->text(), "专业待填写");
     QString name = safeText(m_nameEdit->text(), "姓名待填写");
@@ -463,40 +423,76 @@ QString ResumeWidget::buildResumeHtml() const
             ? "可在左侧填写个人简介。"
             : m_summaryEdit->toPlainText().trimmed().toHtmlEscaped().replace("\n", "<br>");
 
+    // 从纯文本构建正文
+    QString bodyHtml;
+    QStringList lines = m_resumeEdit->toPlainText().split('\n');
+    bool inSection = false;
+    for (const QString& line : lines) {
+        QString trimmed = line.trimmed();
+        if (trimmed.isEmpty()) continue;
+        if (trimmed.startsWith("【") && trimmed.endsWith("】")) {
+            if (inSection) bodyHtml += "</div>";
+            QString title = trimmed.mid(1, trimmed.length() - 2).toHtmlEscaped();
+            bodyHtml += QString("<div class='section-title'>%1</div><div class='section-content'>").arg(title);
+            inSection = true;
+        } else if (trimmed.startsWith("-") || trimmed.startsWith("•")) {
+            QString item = trimmed.mid(1).trimmed().toHtmlEscaped();
+            bodyHtml += QString("<div class='item-block'>%1</div>").arg(item);
+        } else {
+            bodyHtml += QString("<div class='item-block'>%1</div>").arg(trimmed.toHtmlEscaped());
+        }
+    }
+    if (inSection) bodyHtml += "</div>";
+
     QString html;
     html += "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>";
-    html += "body{margin:0;background:#f7f2ff;font-family:'Microsoft YaHei','PingFang SC',Arial;color:#1f2937;}";
-    html += ".paper{width:96%;margin:18px auto;background:#fff;padding:30px 34px;box-sizing:border-box;border-radius:14px;box-shadow:0 10px 26px rgba(91,33,182,.12);}";
-    html += ".resume-title{text-align:center;margin:0 0 24px 0;padding:12px 0;background:#fbf7ff;color:#2e1065;font-size:30px;letter-spacing:10px;font-weight:900;border-bottom:3px solid #d8b4fe;}";
-    html += ".section-title{background:#f1e4ff;color:#7e22ce;font-weight:900;padding:10px 16px;font-size:21px;margin:22px 0 0 0;border-left:6px solid #9333ea;}";
-    html += ".info-table{width:100%;border-collapse:collapse;margin:0 0 24px 0;font-size:16px;}";
-    html += ".info-table td{border:1px solid #e9d5ff;padding:13px 16px;line-height:1.65;vertical-align:middle;}";
-    html += ".info-label{background:#faf5ff;color:#7e22ce;font-weight:900;text-align:center;white-space:nowrap;}";
-    html += ".info-value{background:#ffffff;color:#111827;}";
-    html += ".summary{border:1px solid #eadcff;background:#fff;padding:13px 16px;line-height:1.85;margin-bottom:20px;font-size:16px;}";
-    html += "h2{font-size:21px;color:#7e22ce;background:#f1e4ff;border-left:6px solid #9333ea;padding:10px 16px;margin:24px 0 12px 0;font-weight:900;}";
-    html += "p{font-size:16px;line-height:1.85;margin:5px 0;}";
-    html += "ul{margin:8px 0 14px 24px;padding:0;}li{font-size:16px;line-height:1.85;margin:3px 0;}";
-    html += "@media print{body{background:white}.paper{box-shadow:none;margin:0;width:auto;border-radius:0}}";
+    html += "* { margin:0; padding:0; box-sizing:border-box; }";
+    html += "body { background:#f7f2ff; font-family:'Microsoft YaHei','PingFang SC',Arial; padding:20px; }";
+    // 白色大框无任何内边距
+    html += ".paper { max-width:1100px; margin:0 auto; background:#fff; border-radius:16px; box-shadow:0 5px 20px rgba(0,0,0,0.1); overflow:auto; }";
+    html += ".resume-title { text-align:center; font-size:28px; font-weight:900; color:#2e1065; border-bottom:3px solid #d8b4fe; padding:20px 30px; }";
+
+    // 普通 section 样式（用于个人简介和正文）
+    html += ".section-title { background:#f1e4ff; color:#7e22ce; font-weight:900; font-size:20px; padding:12px 20px; margin:20px 0 0 0; border-left:6px solid #9333ea; }";
+    html += ".section-content { padding:0 20px 20px 20px; }";
+
+    // ★ 基本信息专用样式：标题无左右内边距，表格直接贴边 ★
+    html += ".info-title { background:#f1e4ff; color:#7e22ce; font-weight:900; font-size:20px; padding:12px 0; margin:20px 0 0 0; border-left:6px solid #9333ea; }";
+    // 表格强制 100% 宽度，固定布局，无任何边距
+    html += ".info-table { width:100%; table-layout:fixed; border-collapse:collapse; margin:0; padding:0; }";
+    html += ".info-table td { border:1px solid #e9d5ff; padding:12px; word-break:break-word; white-space:normal; }";
+    html += ".info-table td:nth-child(1) { width:20%; background:#f3e8ff; color:#4c1d95; font-weight:900; text-align:center; }";
+    html += ".info-table td:nth-child(2) { width:30%; background:#ffffff; }";
+    html += ".info-table td:nth-child(3) { width:20%; background:#f3e8ff; color:#4c1d95; font-weight:900; text-align:center; }";
+    html += ".info-table td:nth-child(4) { width:30%; background:#ffffff; }";
+
+    html += ".item-block { background:#f3e8ff; border-radius:12px; padding:12px 16px; margin:12px 0; }";
+    html += ".summary { background:#fff; border:1px solid #eadcff; padding:16px; margin:0; }";
+    html += "@media print { body { background:white; } .item-block { background:white; border:1px solid #e9d5ff; } }";
     html += "</style></head><body><div class='paper'>";
 
     html += "<h1 class='resume-title'>个人简历</h1>";
-    html += "<div class='section-title'>基本信息</div>";
-    html += "<table class='info-table' width='100%' cellspacing='0' cellpadding='0'>";
-    html += "<tr>"
-            "<td class='info-label' width='12%'>学校</td><td class='info-value' width='38%'>" + school + "</td>"
-            "<td class='info-label' width='12%'>专业</td><td class='info-value' width='38%'>" + major + "</td></tr>";
-    html += "<tr>"
-            "<td class='info-label' width='12%'>姓名</td><td class='info-value' width='38%'>" + name + "</td>"
-            "<td class='info-label' width='12%'>性别</td><td class='info-value' width='38%'>" + gender + "</td></tr>";
-    html += "<tr>"
-            "<td class='info-label' width='12%'>电话</td><td class='info-value' width='38%'>" + phone + "</td>"
-            "<td class='info-label' width='12%'>邮箱</td><td class='info-value' width='38%'>" + email + "</td></tr>";
-    html += "<tr><td class='info-label' width='12%'>求职方向</td><td class='info-value' colspan='3'>" + target + "</td></tr>";
-    html += "</table>";
+        html += "<div class='section-title'>基本信息</div>";
+        html += "<table class='info-table' width='100%' cellspacing='0' cellpadding='0'>";
+        html += "<tr>"
+                "<td class='info-label' width='12%'>学校</td><td class='info-value' width='38%'>" + school + "</td>"
+                "<td class='info-label' width='12%'>专业</td><td class='info-value' width='38%'>" + major + "</td></tr>";
+        html += "<tr>"
+                "<td class='info-label' width='12%'>姓名</td><td class='info-value' width='38%'>" + name + "</td>"
+                "<td class='info-label' width='12%'>性别</td><td class='info-value' width='38%'>" + gender + "</td></tr>";
+        html += "<tr>"
+                "<td class='info-label' width='12%'>电话</td><td class='info-value' width='38%'>" + phone + "</td>"
+                "<td class='info-label' width='12%'>邮箱</td><td class='info-value' width='38%'>" + email + "</td></tr>";
+        html += "<tr><td class='info-label' width='12%'>求职方向</td><td class='info-value' colspan='3'>" + target + "</td></tr>";
+        html += "</table>";
 
-    html += "<h2>个人简介</h2><div class='summary'>" + summary + "</div>";
-    html += buildBodyHtmlFromEditor();
+    // 个人简介（保持原有缩进）
+    html += "<div class='section-title'>个人简介</div>";
+    html += "<div class='section-content'><div class='summary'>" + summary + "</div></div>";
+
+    // 正文
+    html += bodyHtml;
+
     html += "</div></body></html>";
     return html;
 }
