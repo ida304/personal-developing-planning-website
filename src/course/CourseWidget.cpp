@@ -6,6 +6,7 @@
 #include <QMessageBox>
 #include <QDebug>
 #include <QHeaderView>
+#include <QTimer>
 
 CourseWidget::CourseWidget(QWidget *parent) : QWidget(parent), m_currentEditId(-1)
 {
@@ -238,61 +239,36 @@ void CourseWidget::refreshTable(const QString& keyword, const QString& field)
 
         QWidget *btnWidget = new QWidget;
         QHBoxLayout *btnLayout = new QHBoxLayout(btnWidget);
-        btnLayout->setContentsMargins(5, 0, 5, 0);
+        btnLayout->setContentsMargins(0, 0, 0, 0);  // 完全无内边距
+        btnLayout->setSpacing(8);                   // 按钮间距8px
+
         QPushButton *editBtn = new QPushButton("编辑");
         QPushButton *delBtn = new QPushButton("删除");
-        editBtn->setFixedWidth(60);
-        delBtn->setFixedWidth(60);
+
+        // 按钮宽度固定为80px，圆角紫色
+        QString btnStyle =
+            "QPushButton { background-color: #8b85ff; color: white; border: none; border-radius: 6px; padding: 4px 0; min-width: 80px; max-width: 80px; }"
+            "QPushButton:hover { background-color: #6c63ff; }";
+        editBtn->setStyleSheet(btnStyle);
+        delBtn->setStyleSheet(btnStyle);
+
         btnLayout->addWidget(editBtn);
         btnLayout->addWidget(delBtn);
+        // 不添加任何弹性空间，让按钮从左到右紧密排列
+
         m_tableWidget->setCellWidget(i, 7, btnWidget);
 
         connect(editBtn, &QPushButton::clicked, this, [this, i]() { onEditClicked(i); });
         connect(delBtn, &QPushButton::clicked, this, [this, c]() { onDeleteClicked(c.id); });
     }
 
-    // 设置列宽：先根据内容自动调整
-    QHeaderView *header = m_tableWidget->horizontalHeader();
-    for (int i = 0; i < m_tableWidget->columnCount(); ++i) {
-        header->setSectionResizeMode(i, QHeaderView::ResizeToContents);
-    }
-    m_tableWidget->resizeColumnsToContents();
 
-    // 获取表格可视区域宽度
-    int viewWidth = m_tableWidget->viewport()->width();
-    // 计算当前所有列宽总和
-    int totalWidth = 0;
-    QVector<int> colWidths(m_tableWidget->columnCount());
-    for (int i = 0; i < m_tableWidget->columnCount(); ++i) {
-        colWidths[i] = m_tableWidget->columnWidth(i);
-        totalWidth += colWidths[i];
-    }
-
-    // 如果总宽度小于可视宽度，按比例分配剩余空间
-    if (totalWidth < viewWidth) {
-        int remaining = viewWidth - totalWidth;
-        double scale = 1.0;
-        for (int i = 0; i < m_tableWidget->columnCount(); ++i) {
-            double ratio = (double)colWidths[i] / totalWidth;
-            int extra = qRound(remaining * ratio);
-            colWidths[i] += extra;
-        }
-        // 由于取整可能仍有少量偏差，将余数加到最后一列
-        int newTotal = 0;
-        for (int i = 0; i < m_tableWidget->columnCount(); ++i) newTotal += colWidths[i];
-        int diff = viewWidth - newTotal;
-        if (diff != 0 && m_tableWidget->columnCount() > 0) {
-            colWidths[m_tableWidget->columnCount()-1] += diff;
-        }
-        // 应用新宽度
-        for (int i = 0; i < m_tableWidget->columnCount(); ++i) {
-            m_tableWidget->setColumnWidth(i, colWidths[i]);
-        }
-    }
-    // 让所有列自动适应内容宽度，且最后一列拉伸填充空白
-    m_tableWidget->resizeColumnsToContents();
-    m_tableWidget->horizontalHeader()->setStretchLastSection(true);
+    // 列宽调整
+    adjustColumnWidths();
+    QTimer::singleShot(10, this, &CourseWidget::adjustColumnWidths);
 }
+
+
 void CourseWidget::onEditClicked(int row)
 {
     QList<Course> courses = DataManager::instance().getAllCourses();
@@ -371,5 +347,65 @@ void CourseWidget::onDeleteClicked(int courseId)
         } else {
             QMessageBox::critical(this, "错误", "删除失败，请重试");
         }
+    }
+}
+
+void CourseWidget::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    // 延迟调用，避免频繁调整
+    QTimer::singleShot(10, this, &CourseWidget::adjustColumnWidths);
+}
+
+void CourseWidget::adjustColumnWidths()
+{
+    int viewWidth = m_tableWidget->viewport()->width();
+    if (viewWidth <= 0) viewWidth = 800;
+
+    // 操作列固定宽度（两个80px按钮 + 8px间距 = 168px，取170px留一点余量）
+    const int baseFixedColWidth = 170;
+    int otherWidth = viewWidth - baseFixedColWidth;
+    if (otherWidth < 0) otherWidth = 0;
+
+    // 比例分配
+    double nameRatio = 0.24;
+    double creditRatio = 0.08;
+    double scoreRatio = 0.08;
+    double typeRatio = 0.16;
+    double tagRatio = 0.14;
+    double semesterRatio = 0.14;
+    double statusRatio = 0.10;
+
+    int nameWidth = otherWidth * nameRatio;
+    int creditWidth = otherWidth * creditRatio;
+    int scoreWidth = otherWidth * scoreRatio;
+    int typeWidth = otherWidth * typeRatio;
+    int tagWidth = otherWidth * tagRatio;
+    int semesterWidth = otherWidth * semesterRatio;
+    int statusWidth = otherWidth * statusRatio;
+
+    // 最小宽度保护
+    if (nameWidth < 120) nameWidth = 120;
+    if (creditWidth < 40) creditWidth = 40;
+    if (scoreWidth < 40) scoreWidth = 40;
+    if (typeWidth < 90) typeWidth = 90;
+    if (tagWidth < 70) tagWidth = 70;
+    if (semesterWidth < 80) semesterWidth = 80;
+    if (statusWidth < 50) statusWidth = 50;
+
+    // 应用列宽
+    m_tableWidget->setColumnWidth(0, nameWidth);
+    m_tableWidget->setColumnWidth(1, creditWidth);
+    m_tableWidget->setColumnWidth(2, scoreWidth);
+    m_tableWidget->setColumnWidth(3, typeWidth);
+    m_tableWidget->setColumnWidth(4, tagWidth);
+    m_tableWidget->setColumnWidth(5, semesterWidth);
+    m_tableWidget->setColumnWidth(6, statusWidth);
+    m_tableWidget->setColumnWidth(7, baseFixedColWidth);
+
+    // 设置拉伸模式
+    m_tableWidget->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Fixed);
+    for (int i = 0; i < 7; ++i) {
+        m_tableWidget->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Interactive);
     }
 }
