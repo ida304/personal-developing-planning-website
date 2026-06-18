@@ -264,27 +264,57 @@ void HomePage::loadAcademicStats()
 void HomePage::loadProgress()
 {
     QLayoutItem *child;
-    while ((child = m_progressLayout->takeAt(0)) != nullptr) delete child;
-    QList<QPair<QString, QPair<int,int>>> data = {
-        {"学科基础必修", {12,24}}, {"专业方向必修", {10,26}},
-        {"通修课程", {18,30}}, {"核心通识", {6,14}}
-    };
-    for (auto &d : data) {
-        QHBoxLayout *row = new QHBoxLayout;
-        QLabel *label = new QLabel(d.first);
-        label->setFixedWidth(130);
+    while ((child = m_progressLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) delete child->widget();
+        delete child;
+    }
+
+    QList<Requirement> reqs = DataManager::instance().getRequirements();
+
+    if (reqs.isEmpty()) {
+        // 无数据时显示一条提示（不硬编码具体值）
+        QLabel *emptyLabel = new QLabel("请填写个人资料（专业、年级）以显示毕业要求");
+        emptyLabel->setStyleSheet("color: #999; font-style: italic;");
+        m_progressLayout->addWidget(emptyLabel);
+        return;
+    }
+
+    for (const Requirement& req : reqs) {
+        QLabel *nameLabel = new QLabel(req.category);
+        nameLabel->setFixedWidth(130);
+
         QProgressBar *bar = new QProgressBar;
-        bar->setRange(0, d.second.second);
-        bar->setValue(d.second.first);
-        bar->setFormat(QString("%1 / %2").arg(d.second.first).arg(d.second.second));
-        row->addWidget(label);
-        row->addWidget(bar);
+        // 关键：即使总学分为0，也设置合理范围并显示文本，确保条目可见
+        if (req.requiredCredits == 0) {
+            bar->setRange(0, 1);
+            bar->setValue(0);
+            bar->setFormat("0.0 / 0.0");
+        } else {
+            int maxVal = static_cast<int>(req.requiredCredits);
+            int curVal = static_cast<int>(req.earnedCredits);
+            // 如果已修学分超出总学分，进度条显示为100%，但数值仍显示实际值
+            if (curVal > maxVal) curVal = maxVal;
+            bar->setRange(0, maxVal);
+            bar->setValue(curVal);
+            bar->setFormat(QString("%1 / %2")
+                           .arg(req.earnedCredits, 0, 'f', 1)
+                           .arg(req.requiredCredits, 0, 'f', 1));
+        }
+
+        // 确保进度条高度足够显示文本
+        bar->setMinimumHeight(25);
+
+        QHBoxLayout *row = new QHBoxLayout;
+        row->setSpacing(10);
+        row->addWidget(nameLabel);
+        row->addWidget(bar, 1);
         m_progressLayout->addLayout(row);
     }
 }
 
 void HomePage::loadTodos()
 {
+    // 清空原有待办
     QLayoutItem *child;
     while ((child = m_todoLayout->takeAt(0)) != nullptr) {
         if (child->widget()) delete child->widget();
@@ -294,6 +324,7 @@ void HomePage::loadTodos()
     auto& dm = DataManager::instance();
     bool hasTodo = false;
 
+    // 毕业要求缺口
     QList<Requirement> reqs = dm.getRequirements();
     for (const Requirement& req : reqs) {
         double shortage = req.requiredCredits - req.earnedCredits;
@@ -304,6 +335,7 @@ void HomePage::loadTodos()
         }
     }
 
+    // 未录入成绩的课程
     QList<Course> courses = dm.getAllCourses();
     int noGradeCount = 0;
     for (const Course& c : courses) {

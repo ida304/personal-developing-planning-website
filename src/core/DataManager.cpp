@@ -355,7 +355,14 @@ QList<Requirement> DataManager::getRequirements() const
 {
     QList<Requirement> requirements;
 
-    // 1. 从资源文件加载毕业要求总学分
+    UserProfile profile = getUserProfile();
+    QString major = profile.major;
+    QString grade = profile.grade;
+
+    if (major.isEmpty() || grade.isEmpty()) {
+        return requirements;
+    }
+
     QFile file(":/data/graduation_reqs.json");
     if (!file.open(QIODevice::ReadOnly)) {
         qWarning() << "Failed to open graduation_reqs.json";
@@ -368,16 +375,31 @@ QList<Requirement> DataManager::getRequirements() const
         return requirements;
     }
     QJsonObject root = doc.object();
-    for (const QString& key : root.keys()) {
+
+    if (!root.contains(major)) {
+        qWarning() << "Major not found:" << major;
+        return requirements;
+    }
+    QJsonObject majorObj = root[major].toObject();
+
+    if (!majorObj.contains(grade)) {
+        qWarning() << "Grade not found:" << grade;
+        return requirements;
+    }
+    QJsonObject gradeObj = majorObj[grade].toObject();
+
+    // 遍历所有键，并 trim 去除可能的空白字符
+    for (const QString& key : gradeObj.keys()) {
+        QString trimmedKey = key.trimmed();
         Requirement req;
-        req.category = key;
-        req.requiredCredits = root[key].toDouble();
+        req.category = trimmedKey;
+        req.requiredCredits = gradeObj[key].toDouble();
         req.earnedCredits = 0.0;
         requirements.append(req);
     }
     file.close();
 
-    // 2. 获取所有课程，累加已修学分（成绩≥60）
+    // 累加已修学分
     QList<Course> courses = getAllCourses();
     for (const Course& c : courses) {
         if (c.status == "已修" && c.score >= 60) {

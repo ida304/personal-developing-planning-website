@@ -8,12 +8,16 @@
 #include <QPushButton>
 #include <QTableWidget>
 #include <QLabel>
+#include <QResizeEvent>
 
 class CourseWidget : public QWidget
 {
     Q_OBJECT
 public:
     explicit CourseWidget(QWidget *parent = nullptr);
+
+protected:
+    void resizeEvent(QResizeEvent *event) override;
 
 private slots:
     void onAddClicked();
@@ -28,6 +32,7 @@ private:
     void updateGPA();
     void clearForm();
     void setEditingMode(bool editing, int id = -1);
+    void adjustColumnWidths();
 
     QLineEdit *m_nameEdit;
     QDoubleSpinBox *m_creditSpin;
