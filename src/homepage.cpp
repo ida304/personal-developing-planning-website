@@ -54,6 +54,8 @@ void HomePage::setupUI()
     // ========== 第一行 ==========
     QHBoxLayout *topRow = new QHBoxLayout;
     topRow->setSpacing(20);
+    topRow->setStretch(0, 1);
+    topRow->setStretch(1, 1);
 
     // 个人信息卡片
     QGroupBox *infoCard = new QGroupBox;
@@ -106,6 +108,8 @@ void HomePage::setupUI()
     // ========== 第二行 ==========
     QHBoxLayout *middleRow = new QHBoxLayout;
     middleRow->setSpacing(20);
+    middleRow->setStretch(0, 1);
+    middleRow->setStretch(1, 1);
 
     // 毕业进度卡片
     QGroupBox *progressCard = new QGroupBox;
@@ -148,6 +152,8 @@ void HomePage::setupUI()
     // ========== 第三行：两个独立卡片 ==========
     QHBoxLayout *recentRow = new QHBoxLayout;
     recentRow->setSpacing(20);
+    recentRow->setStretch(0, 1);
+    recentRow->setStretch(1, 1);
 
     // 成就卡片
     QGroupBox *achievementCard = new QGroupBox;
