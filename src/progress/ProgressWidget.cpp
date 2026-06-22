@@ -15,9 +15,10 @@
 #include <QFormLayout>
 #include <QDebug>
 #include <QJsonDocument>
-#include <QDebug>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QScrollArea>
+#include <QFrame>
 
 ProgressWidget::ProgressWidget(QWidget *parent)
     : QWidget(parent), isManualOverride(false)
@@ -28,7 +29,8 @@ ProgressWidget::ProgressWidget(QWidget *parent)
     setupUI();
     categoryMapping = loadCategoryMapping();
 
-    // 【核心关联】监听 DataManager 的全局数据变更信号（课程增删改、个人信息修改均会触发）
+    // 【核心关联】监听 DataManager 的全局数据变更信号
+    // 课程增删改、个人信息修改都会触发此信号，实现自动刷新
     connect(&DataManager::instance(), &DataManager::dataChanged,
             this, &ProgressWidget::refreshData);
 
@@ -41,81 +43,173 @@ ProgressWidget::~ProgressWidget()
 
 void ProgressWidget::setupUI()
 {
-    QWidget *container = new QWidget(this);
-    container->setStyleSheet("QWidget { background-color: white; border-radius: 16px; border: 1px solid #eef0f7; }");
+    // 1. 创建滚动区域（解决小屏无法拖动问题）
+    QScrollArea *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true); // 允许内容自动调整大小
+    scrollArea->setFrameShape(QFrame::NoFrame); // 去掉滚动区域的边框
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); // 隐藏水平滚动条，强制竖向排版
+    scrollArea->setStyleSheet("QScrollArea { background-color: transparent; }");
+
+    // 2. 创建主容器（白色圆角背景）
+    QWidget *container = new QWidget();
+    container->setStyleSheet(
+        "QWidget { background-color: white; border-radius: 16px; border: 1px solid #eef0f7; }"
+    );
+
     QVBoxLayout *containerLayout = new QVBoxLayout(container);
-    containerLayout->setContentsMargins(20, 20, 20, 20);
-    containerLayout->setSpacing(20);
+    // 【修改】增大左右边距到 40，防止全屏时文字贴边被遮挡
+    containerLayout->setContentsMargins(40, 30, 40, 30);
+    containerLayout->setSpacing(25);
 
-    QGridLayout *mainLayout = new QGridLayout();
-    mainLayout->setSpacing(20);
-
-    QLabel *titleLabel = new QLabel("培养进度追踪", this);
+    // 标题 - 大字体
+    QLabel *titleLabel = new QLabel(" 培养进度追踪", container);
     QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(18);
+    titleFont.setPointSize(22);
     titleFont.setBold(true);
     titleLabel->setFont(titleFont);
-    titleLabel->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(titleLabel, 0, 0, 1, 4, Qt::AlignCenter);
-    mainLayout->addItem(new QSpacerItem(20, 20), 1, 0);
+    titleLabel->setStyleSheet("color: #5c6bc0; padding: 10px 0;");
+    containerLayout->addWidget(titleLabel);
 
-    int row = 2;
-    int col = 0;
+    // 说明文字 - 中等字体
+    QLabel *infoLabel = new QLabel("系统将根据您的专业和年级自动加载培养方案，实时追踪学分完成情况", container);
+    QFont infoFont = infoLabel->font();
+    infoFont.setPointSize(12);
+    infoLabel->setFont(infoFont);
+    infoLabel->setStyleSheet("color: #757575; padding: 5px 0;");
+    containerLayout->addWidget(infoLabel);
+
+    // 分隔线
+    QLabel *lineLabel = new QLabel(container);
+    lineLabel->setFixedHeight(2);
+    lineLabel->setStyleSheet("background-color: #e0e0e0;");
+    containerLayout->addWidget(lineLabel);
+
+    // 3. 类别列表布局（单列竖向，每个类别独占一行）
+    QVBoxLayout *categoryLayout = new QVBoxLayout();
+    categoryLayout->setSpacing(20);
+
     for (const QString &category : categories) {
-        QLabel *categoryLabel = new QLabel(category, this);
-        categoryLabel->setMinimumWidth(120);
-        categoryLabel->setMaximumWidth(150);
-        categoryLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        mainLayout->addWidget(categoryLabel, row, col * 3, Qt::AlignLeft);
+        // 创建卡片容器
+        QWidget *cardWidget = new QWidget(container);
+        cardWidget->setStyleSheet(
+            "QWidget { background-color: #fafafa; border-radius: 10px; padding: 5px; border: 1px solid #e0e0e0; }"
+        );
 
-        QProgressBar *progressBar = new QProgressBar(this);
+        QVBoxLayout *cardLayout = new QVBoxLayout(cardWidget);
+        // 【修改】增大卡片内部左右边距，彻底解决文字遮挡
+        cardLayout->setContentsMargins(25, 20, 25, 20);
+        cardLayout->setSpacing(15);
+
+        // 第一行：类别名称和学分信息（横向布局）
+        QHBoxLayout *headerLayout = new QHBoxLayout();
+
+        QLabel *categoryLabel = new QLabel(category, cardWidget);
+        QFont catFont = categoryLabel->font();
+        catFont.setPointSize(16);
+        catFont.setBold(true);
+        categoryLabel->setFont(catFont);
+        categoryLabel->setStyleSheet("color: #424242;");
+        // 【修改】设置最小宽度，防止文字被挤压
+        categoryLabel->setMinimumWidth(150);
+        headerLayout->addWidget(categoryLabel);
+
+        headerLayout->addStretch();
+
+        QLabel *creditLabel = new QLabel("0.0 / 0.0 学分", cardWidget);
+        QFont creditFont = creditLabel->font();
+        creditFont.setPointSize(15);
+        creditFont.setBold(true);
+        creditLabel->setFont(creditFont);
+        creditLabel->setMinimumWidth(180);
+        creditLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        creditLabel->setStyleSheet("color: #1976d2;");
+        creditLabels[category] = creditLabel;
+        headerLayout->addWidget(creditLabel);
+
+        cardLayout->addLayout(headerLayout);
+
+        // 第二行：进度条 - 加大高度
+        QProgressBar *progressBar = new QProgressBar(cardWidget);
         progressBar->setRange(0, 100);
         progressBar->setValue(0);
-        progressBar->setMinimumHeight(25);
+        progressBar->setFixedHeight(35);
         progressBar->setFormat("%p%");
+        progressBar->setStyleSheet(
+            "QProgressBar { "
+            "   background-color: #e0e0e0; "
+            "   border: none; "
+            "   border-radius: 17px; "
+            "   text-align: center; "
+            "   color: #ffffff; "
+            "   font-size: 14px; "
+            "   font-weight: bold; "
+            "} "
+            "QProgressBar::chunk { "
+            "   background-color: #9fa8da; "
+            "   border-radius: 17px; "
+            "} "
+        );
         progressBars[category] = progressBar;
-        mainLayout->addWidget(progressBar, row, col * 3 + 1);
+        cardLayout->addWidget(progressBar);
 
-        QLabel *creditLabel = new QLabel("0.0 / 0.0", this);
-        creditLabel->setMinimumWidth(100);
-        creditLabel->setAlignment(Qt::AlignCenter | Qt::AlignVCenter);
-        creditLabels[category] = creditLabel;
-        mainLayout->addWidget(creditLabel, row, col * 3 + 2);
-
-        QLabel *gapLabel = new QLabel("", this);
-        gapLabel->setMinimumWidth(80);
-        gapLabel->setAlignment(Qt::AlignCenter | Qt::AlignVCenter);
+        // 第三行：缺口信息 - 中等字体
+        QLabel *gapLabel = new QLabel("", cardWidget);
+        QFont gapFont = gapLabel->font();
+        gapFont.setPointSize(13);
+        gapFont.setBold(true);
+        gapLabel->setFont(gapFont);
+        gapLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        gapLabel->setStyleSheet("color: #f44336; padding: 5px 0;");
         gapLabels[category] = gapLabel;
-        mainLayout->addWidget(gapLabel, row, col * 3 + 3);
+        cardLayout->addWidget(gapLabel);
 
-        col++;
-        if (col > 1) {
-            col = 0;
-            row++;
-            mainLayout->addItem(new QSpacerItem(20, 10), row - 1, 0);
-        }
+        categoryLayout->addWidget(cardWidget);
     }
-    mainLayout->setRowStretch(row + 1, 1);
 
+    containerLayout->addLayout(categoryLayout);
+    containerLayout->addStretch();
+
+    // 导出按钮 - 大字体
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     buttonLayout->addStretch();
-    exportButton = new QPushButton("导出进度报告", this);
-    exportButton->setMinimumWidth(150);
-    exportButton->setMinimumHeight(35);
+
+    exportButton = new QPushButton("📄 导出进度报告", container);
+    QFont btnFont = exportButton->font();
+    btnFont.setPointSize(15);
+    btnFont.setBold(true);
+    exportButton->setFont(btnFont);
+    exportButton->setMinimumWidth(250);
+    exportButton->setFixedHeight(50);
+    exportButton->setCursor(Qt::PointingHandCursor);
     exportButton->setStyleSheet(
-        "QPushButton { background-color: #4CAF50; color: white; border-radius: 5px; padding: 8px; }"
-        "QPushButton:hover { background-color: #45a049; }"
+        "QPushButton { "
+        "   background-color: #66bb6a; "
+        "   color: white; "
+        "   border: none; "
+        "   border-radius: 10px; "
+        "   font-size: 15px; "
+        "   font-weight: bold; "
+        "} "
+        "QPushButton:hover { "
+        "   background-color: #4caf50; "
+        "} "
+        "QPushButton:pressed { "
+        "   background-color: #43a047; "
+        "} "
     );
     connect(exportButton, &QPushButton::clicked, this, &ProgressWidget::generateHTMLReport);
     buttonLayout->addWidget(exportButton);
     buttonLayout->addStretch();
 
-    mainLayout->addLayout(buttonLayout, row + 2, 0, 1, 4);
-    containerLayout->addLayout(mainLayout);
+    containerLayout->addLayout(buttonLayout);
 
+    // 4. 将容器放入滚动区域
+    scrollArea->setWidget(container);
+
+    // 5. 主布局
     QVBoxLayout *outerLayout = new QVBoxLayout(this);
-    outerLayout->setContentsMargins(0, 0, 0, 0);
-    outerLayout->addWidget(container);
+    outerLayout->setContentsMargins(0, 0, 0, 0); // 去掉最外层边距，让滚动条贴边
+    outerLayout->addWidget(scrollArea);
 }
 
 QMap<QString, QStringList> ProgressWidget::loadCategoryMapping()
@@ -158,13 +252,12 @@ bool ProgressWidget::loadGraduationReqsWithFallback(const QString& major, const 
                         requiredCredits[cat] = 0.0;
                     }
                 }
-                isManualOverride = false; // 成功从配置文件加载，取消手动标记
+                isManualOverride = false;
                 return true;
             }
         }
     }
 
-    // 如果未找到预设配置，触发降级策略
     showManualCreditDialog();
     return false;
 }
@@ -173,9 +266,14 @@ void ProgressWidget::showManualCreditDialog()
 {
     QDialog dialog(this);
     dialog.setWindowTitle("手动录入应修学分");
-    dialog.setMinimumWidth(400);
+    dialog.setMinimumWidth(600);
+    dialog.setMinimumHeight(500);
+
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
     QLabel *infoLabel = new QLabel("未找到您专业/年级的培养方案，请手动录入各类别应修学分：", &dialog);
+    QFont infoFont = infoLabel->font();
+    infoFont.setPointSize(13);
+    infoLabel->setFont(infoFont);
     infoLabel->setWordWrap(true);
     layout->addWidget(infoLabel);
 
@@ -183,9 +281,19 @@ void ProgressWidget::showManualCreditDialog()
     for (const QString &cat : categories) {
         QHBoxLayout *hLayout = new QHBoxLayout();
         QLabel *label = new QLabel(cat + ":", &dialog);
+        QFont labelFont = label->font();
+        labelFont.setPointSize(12);
+        label->setFont(labelFont);
+        label->setMinimumWidth(150);
+
         QDoubleSpinBox *spinBox = new QDoubleSpinBox(&dialog);
         spinBox->setRange(0, 100);
         spinBox->setDecimals(1);
+        spinBox->setSingleStep(0.5);
+        QFont spinFont = spinBox->font();
+        spinFont.setPointSize(12);
+        spinBox->setFont(spinFont);
+
         spinBoxes[cat] = spinBox;
         hLayout->addWidget(label);
         hLayout->addWidget(spinBox);
@@ -202,7 +310,7 @@ void ProgressWidget::showManualCreditDialog()
         for (const QString &cat : categories) {
             requiredCredits[cat] = spinBoxes[cat]->value();
         }
-        isManualOverride = true; // 标记为手动录入，防止后续刷新再次弹窗
+        isManualOverride = true;
     } else {
         requiredCredits.clear();
         for (const QString &cat : categories) {
@@ -219,15 +327,16 @@ QMap<QString, double> ProgressWidget::calculateEarnedCredits()
         earned[cat] = 0.0;
     }
 
-    // 获取最新课程列表
+    // 【核心关联】实时从 DataManager 获取最新课程列表
     QList<Course> courses = DataManager::instance().getAllCourses();
+
     for (const Course &course : courses) {
-        // 只统计状态为“已修”的课程
+        // 严格遵循规范：只统计状态为"已修"的课程
         if (course.status != "已修") {
             continue;
         }
 
-        // 通过映射表将课程类型归类到毕业要求类别
+        // 严格遵循规范：使用 courseType 字段进行映射匹配
         if (categoryMapping.contains(course.courseType)) {
             QStringList targets = categoryMapping[course.courseType];
             for (const QString &target : targets) {
@@ -248,19 +357,27 @@ void ProgressWidget::refreshData()
 {
     UserProfile profile = DataManager::instance().getUserProfile();
 
-    // 1. 如果专业或年级为空，清空显示并提示（仅首次提示，避免打扰）
+    // 1. 如果专业或年级为空，清空显示并提示
     if (profile.major.isEmpty() || profile.grade.isEmpty()) {
         for (const QString &category : categories) {
             if (progressBars.contains(category)) {
                 progressBars[category]->setValue(0);
-                progressBars[category]->setStyleSheet("QProgressBar { background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; }");
+                progressBars[category]->setStyleSheet(
+                    "QProgressBar { background-color: #e0e0e0; border-radius: 17px; } "
+                    "QProgressBar::chunk { background-color: #bdbdbd; border-radius: 17px; }"
+                );
             }
-            if (creditLabels.contains(category)) creditLabels[category]->setText("请先填写个人资料");
-            if (gapLabels.contains(category)) gapLabels[category]->setText("");
+            if (creditLabels.contains(category))
+                creditLabels[category]->setText("0.0 / 0.0 学分");
+            if (gapLabels.contains(category))
+                gapLabels[category]->setText("");
         }
 
+        // 仅在首次检测到为空时提示
         if (lastMajor.isEmpty()) {
-            QMessageBox::information(this, "提示", "检测到您尚未填写个人资料（专业、年级）。\n请先前往【个人资料】标签页填写，系统将自动加载对应的培养方案。");
+            QMessageBox::information(this, "提示",
+                "检测到您尚未填写个人资料（专业、年级）。\n"
+                "请先前往【个人资料】标签页填写，系统将自动加载对应的培养方案。");
         }
         lastMajor = "";
         lastGrade = "";
@@ -268,19 +385,18 @@ void ProgressWidget::refreshData()
     }
 
     // 2. 【核心关联】检测个人主页的专业/年级是否发生变化
-    // 只有当专业、年级变化，或者尚未加载过配置时，才重新读取 JSON
     if (profile.major != lastMajor || profile.grade != lastGrade || requiredCredits.isEmpty()) {
         loadGraduationReqsWithFallback(profile.major, profile.grade);
-        lastMajor = profile.major;   // 更新记录
-        lastGrade = profile.grade;   // 更新记录
+        lastMajor = profile.major;
+        lastGrade = profile.grade;
     }
 
-    // 3. 确保映射表已加载（通常只需加载一次）
+    // 3. 确保映射表已加载
     if (categoryMapping.isEmpty()) {
         categoryMapping = loadCategoryMapping();
     }
 
-    // 4. 重新计算并更新界面（课程模块的增删改也会走到这里，实现学分实时增减）
+    // 4. 重新计算并更新界面
     updateProgressDisplay();
 }
 
@@ -297,21 +413,53 @@ void ProgressWidget::updateProgressDisplay()
         QProgressBar *progressBar = progressBars[category];
         progressBar->setValue(static_cast<int>(completionRate));
 
-        QString styleSheet;
+        // 根据完成状态设置样式
+        QString progressBarStyle;
         if (gap > 0) {
-            styleSheet = "QProgressBar { background-color: #ffebee; border: 1px solid #e57373; border-radius: 3px; } "
-                         "QProgressBar::chunk { background-color: #e57373; }";
-            gapLabels[category]->setText(QString("缺口: %1").arg(gap, 0, 'f', 1));
-            gapLabels[category]->setStyleSheet("color: #e57373; font-weight: bold;");
+            // 未完成 - 红色
+            progressBarStyle =
+                "QProgressBar { "
+                "   background-color: #ffebee; "
+                "   border: none; "
+                "   border-radius: 17px; "
+                "   text-align: center; "
+                "   color: #ffffff; "
+                "   font-size: 14px; "
+                "   font-weight: bold; "
+                "} "
+                "QProgressBar::chunk { "
+                "   background-color: #ef5350; "
+                "   border-radius: 17px; "
+                "} ";
+            gapLabels[category]->setText(QString("⚠️ 还需修读 %1 学分").arg(gap, 0, 'f', 1));
+            gapLabels[category]->setStyleSheet("color: #f44336; font-size: 13px; font-weight: bold; padding: 5px;");
         } else {
-            styleSheet = "QProgressBar { background-color: #e8f5e9; border: 1px solid #66bb6a; border-radius: 3px; } "
-                         "QProgressBar::chunk { background-color: #66bb6a; }";
-            gapLabels[category]->setText("✓ 完成");
-            gapLabels[category]->setStyleSheet("color: #66bb6a; font-weight: bold;");
+            // 已完成 - 绿色
+            progressBarStyle =
+                "QProgressBar { "
+                "   background-color: #e8f5e9; "
+                "   border: none; "
+                "   border-radius: 17px; "
+                "   text-align: center; "
+                "   color: #ffffff; "
+                "   font-size: 14px; "
+                "   font-weight: bold; "
+                "} "
+                "QProgressBar::chunk { "
+                "   background-color: #66bb6a; "
+                "   border-radius: 17px; "
+                "} ";
+            gapLabels[category]->setText("✅ 已完成");
+            gapLabels[category]->setStyleSheet("color: #4caf50; font-size: 13px; font-weight: bold; padding: 5px;");
         }
-        progressBar->setStyleSheet(styleSheet);
-        creditLabels[category]->setText(QString("%1 / %2").arg(earned, 0, 'f', 1).arg(required, 0, 'f', 1));
+        progressBar->setStyleSheet(progressBarStyle);
 
+        // 更新学分显示
+        creditLabels[category]->setText(QString("%1 / %2 学分")
+            .arg(earned, 0, 'f', 1)
+            .arg(required, 0, 'f', 1));
+
+        // 保存进度摘要
         ProgressSummary summary;
         summary.category = category;
         summary.required = required;
@@ -325,6 +473,7 @@ void ProgressWidget::updateProgressDisplay()
 void ProgressWidget::generateHTMLReport()
 {
     UserProfile profile = DataManager::instance().getUserProfile();
+
     QString htmlContent = R"(
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -370,8 +519,10 @@ tr:hover { background-color: #f5f5f5; }
 <th>进度条</th>
 </tr>
 )";
+
     double totalRequired = 0, totalEarned = 0;
     int completedCount = 0;
+
     for (const QString &category : categories) {
         ProgressSummary summary = progressSummary[category];
         totalRequired += summary.required;
@@ -428,7 +579,9 @@ tr:hover { background-color: #f5f5f5; }
         ProgressSummary summary = progressSummary[category];
         if (summary.gap > 0) {
             hasGap = true;
-            htmlContent += QString("<li><strong>%1</strong>：还需修读 %2 学分</li>").arg(category).arg(summary.gap, 0, 'f', 1);
+            htmlContent += QString("<li><strong>%1</strong>：还需修读 %2 学分</li>")
+                .arg(category)
+                .arg(summary.gap, 0, 'f', 1);
         }
     }
     if (!hasGap) htmlContent += "<li>🎉 恭喜！所有类别学分要求均已满足！</li>";
@@ -450,7 +603,9 @@ tr:hover { background-color: #f5f5f5; }
     if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         file.write(htmlContent.toUtf8());
         file.close();
-        QMessageBox::information(this, "导出成功", QString("进度报告已生成！\n文件位置：%1\n系统将自动打开报告，您可以使用Ctrl+P打印或保存为PDF。").arg(fileName));
+        QMessageBox::information(this, "导出成功",
+            QString("进度报告已生成！\n文件位置：%1\n系统将自动打开报告，您可以使用Ctrl+P打印或保存为PDF。")
+            .arg(fileName));
         QDesktopServices::openUrl(QUrl::fromLocalFile(fileName));
     } else {
         QMessageBox::warning(this, "导出失败", "无法保存报告文件，请检查磁盘空间或权限。");
